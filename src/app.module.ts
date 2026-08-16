@@ -1,11 +1,19 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { DatabaseModule } from './database/database.module';
+import { ConfigModule } from '@nestjs/config';
+import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { UsersModule } from './users/users.module';
+
+import mikroOrmConfig from './database/mikro-orm.config';
 
 @Module({
-  imports: [DatabaseModule],
-  controllers: [AppController],
-  providers: [AppService],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+
+    MikroOrmModule.forRoot(mikroOrmConfig),
+
+    UsersModule,
+  ],
 })
 export class AppModule {}

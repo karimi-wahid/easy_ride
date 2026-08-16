@@ -1,4 +1,12 @@
+import 'dotenv/config';
 import { defineConfig } from '@mikro-orm/postgresql';
+
+console.log({
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  dbName: process.env.DB_NAME,
+  user: process.env.DB_USER,
+});
 
 export default defineConfig({
   host: process.env.DB_HOST,
