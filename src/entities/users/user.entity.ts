@@ -11,9 +11,21 @@ export class User {
   @Property({ type: 'string' })
   phone!: string;
 
-  @Property({ type: 'Date' })
+  @Property({
+    fieldName: 'password_hash',
+    type: 'string',
+  })
+  passwordHash?: string;
+
+  @Property({
+    fieldName: 'created_at',
+    type: 'Date',
+  })
   createdAt!: Date;
 
-  @Property({ type: 'Date' })
+  @Property({
+    fieldName: 'updated_at',
+    type: 'Date',
+  })
   updatedAt!: Date;
 }

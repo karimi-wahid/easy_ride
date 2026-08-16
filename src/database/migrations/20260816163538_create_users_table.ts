@@ -19,5 +19,5 @@ export async function up(knex: Knex): Promise<void> {
 }
 
 export async function down(knex: Knex): Promise<void> {
-  await knex.raw('drop table if exists "user" cascade');
+  await knex.raw('drop table if exists "users" cascade');
 }
