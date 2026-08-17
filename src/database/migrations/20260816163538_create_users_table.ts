@@ -1,23 +1,44 @@
 import { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
+  await knex.raw('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
+
   await knex.schema.createTable('users', (table) => {
-    table.increments('id').primary();
-    table.string('fullname', 255).notNullable();
-    table.string('phone', 255).notNullable();
     table
-      .specificType('created_at', 'timestamptz')
-      .notNullable()
-      .defaultTo(knex.fn.now());
+      .uuid('id')
+      .primary()
+      .defaultTo(knex.raw('gen_random_uuid()'));
+
     table
-      .specificType('updated_at', 'timestamptz')
+      .string('fullname', 255)
+      .notNullable();
+
+    table
+      .string('phone', 255)
+      .notNullable();
+
+    table
+      .timestamp('created_at', { useTz: true })
       .notNullable()
       .defaultTo(knex.fn.now());
 
-    table.unique(['phone'], 'user_phone_unique');
+    table
+      .timestamp('updated_at', { useTz: true })
+      .notNullable()
+      .defaultTo(knex.fn.now());
+
+    table
+      .timestamp('deleted_at', { useTz: true })
+      .nullable();
+
+    table.unique(['phone'], {
+      indexName: 'users_phone_unique',
+    });
+
+    table.index(['deleted_at'], 'users_deleted_at_index');
   });
 }
 
 export async function down(knex: Knex): Promise<void> {
-  await knex.raw('drop table if exists "users" cascade');
+  await knex.schema.dropTableIfExists('users');
 }

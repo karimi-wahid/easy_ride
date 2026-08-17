@@ -1,13 +1,14 @@
-import { IsNumber, IsString, Length, Matches } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+} from 'class-validator';
 
 export class VerifyTwoFactorDto {
   @IsString()
+  @IsNotEmpty()
   challengeToken!: string;
 
-  @IsNumber()
-  @Length(6, 6)
-  @Matches(/^\d{6}$/, {
-    message: 'OTP must contain exactly 6 digits',
-  })
+  @IsString()
+  @IsNotEmpty()
   code!: string;
 }

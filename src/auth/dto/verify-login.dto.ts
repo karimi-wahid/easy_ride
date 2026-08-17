@@ -1,12 +1,14 @@
 import {
   IsNotEmpty,
-  IsPhoneNumber,
   IsString,
 } from 'class-validator';
 
-export class LoginDto {
+export class VerifyLoginDto {
   @IsString()
   @IsNotEmpty()
-  @IsPhoneNumber('AF')
   phone!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  code!: string;
 }

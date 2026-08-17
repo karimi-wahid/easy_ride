@@ -1,5 +1,5 @@
-import type { Knex } from 'knex';
 import 'dotenv/config';
+import type { Knex } from 'knex';
 
 const config: Knex.Config = {
   client: 'pg',

@@ -1,51 +1,56 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
+import {
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 
-import { OtpPurpose } from './types/otp-purpose.enum';
+import { OtpApiService } from '../shared/HttpService.service';
+import { OtpPurpose } from '../shared/types/otp-purpose.enum';
 
 @Injectable()
 export class OtpService {
-  private readonly mockOtpUrl: string;
+  private readonly logger = new Logger(
+    OtpService.name,
+  );
 
   constructor(
-    private readonly httpService: HttpService,
-    private readonly configService: ConfigService,
-  ) {
-    this.mockOtpUrl = this.configService.getOrThrow<string>('MOCK_OTP_URL');
+    private readonly otpApiService: OtpApiService,
+  ) {}
+
+  async sendOtp(
+    phone: string,
+    purpose: OtpPurpose,
+  ): Promise<void> {
+    await this.otpApiService.sendOtp(
+      phone,
+      purpose,
+    );
+
+    this.logger.log(
+      `OTP request completed for ${purpose}`,
+    );
   }
 
-  async sendOtp(phone: string, purpose: OtpPurpose) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(`${this.mockOtpUrl}/otp/send`, {
-          phone,
-          purpose,
-        }),
+  async verifyOtp(
+    phone: string,
+    purpose: OtpPurpose,
+    code: string,
+  ): Promise<void> {
+    const verified =
+      await this.otpApiService.verifyOtp(
+        phone,
+        purpose,
+        code,
       );
 
-      return response.data;
-    } catch (error) {
-      console.error('OTP SEND ERROR:', error);
-      throw new InternalServerErrorException('Unable to send OTP');
-    }
-  }
-
-  async verifyOtp(phone: string, purpose: OtpPurpose, code: string) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(`${this.mockOtpUrl}/otp/verify`, {
-          phone,
-          purpose,
-          code,
-        }),
+    if (!verified) {
+      throw new UnauthorizedException(
+        'Invalid or expired OTP',
       );
-
-      return response.data;
-    } catch (error) {
-      throw new InternalServerErrorException('Unable to verify OTP');
-      console.log(error);
     }
+
+    this.logger.log(
+      `OTP verified for ${purpose}`,
+    );
   }
 }

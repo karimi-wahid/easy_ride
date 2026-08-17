@@ -2,29 +2,44 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { PassportModule } from '@nestjs/passport';
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+
+import { JwtStrategy } from '../shared/strategies/jwt.strategy';
+
 import { OtpModule } from '../otp/otp.module';
-import { User } from 'src/entities/users/user.entity';
-import { PassportModule } from '@nestjs/passport';
-import { JwtStrategy } from './strategies/jwt.strategy';
-import { AuthSession } from 'src/entities/auth-session/auth-session.entity';
+import { UsersModule } from '../users/users.module';
+
+import { User } from '../database/entities/user.entity';
+import { UserSession } from '../database/entities/user-session.entity';
+import { UserSecurityAction } from '../database/entities/user-security-action.entity';
+import { UserTwoFactor } from '../database/entities/user-two-factor.entity';
 
 @Module({
   imports: [
-    PassportModule,
-    MikroOrmModule.forFeature([User, AuthSession]),
-
+    ConfigModule,
+    UsersModule,
     OtpModule,
+    PassportModule,
+
+    MikroOrmModule.forFeature([
+      User,
+      UserSession,
+      UserSecurityAction,
+      UserTwoFactor,
+    ]),
 
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
-
+      useFactory: (
+        configService: ConfigService,
+      ) => ({
+        secret: configService.getOrThrow<string>(
+          'JWT_ACCESS_SECRET',
+        ),
         signOptions: {
           expiresIn: '15m',
         },
@@ -32,8 +47,13 @@ import { AuthSession } from 'src/entities/auth-session/auth-session.entity';
     }),
   ],
 
-  controllers: [AuthController],
+  controllers: [
+    AuthController,
+  ],
 
-  providers: [AuthService, JwtStrategy],
+  providers: [
+    AuthService,
+    JwtStrategy,
+  ],
 })
 export class AuthModule {}

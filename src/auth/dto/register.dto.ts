@@ -1,19 +1,23 @@
-import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  IsNotEmpty,
+  IsPhoneNumber,
+} from 'class-validator';
 
 export class RegisterDto {
-  @IsString()
-  @MinLength(2)
-  @MaxLength(255)
+  @IsNotEmpty()
   fullname!: string;
 
-  @IsString()
-  @Matches(/^\+?[1-9]\d{7,14}$/, {
-    message: 'Invalid phone number',
+  @IsNotEmpty()
+  @IsPhoneNumber('AF')
+  @Transform(({ value }) => {
+    const normalized = value.replace(/\s+/g, '');
+
+    if (normalized.startsWith('0')) {
+      return `+93${normalized.substring(1)}`;
+    }
+
+    return normalized;
   })
   phone!: string;
-
-  @IsString()
-  @MinLength(8)
-  @MaxLength(128)
-  password!: string;
 }

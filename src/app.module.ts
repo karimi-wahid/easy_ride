@@ -5,7 +5,7 @@ import { UsersModule } from './users/users.module';
 import { OtpModule } from './otp/otp.module';
 import { AuthModule } from './auth/auth.module';
 
-import mikroOrmConfig from './database/mikro-orm.config';
+import mikroOrmConfig from '../mikro-orm.config';
 
 @Module({
   imports: [

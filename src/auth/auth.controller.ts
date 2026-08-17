@@ -1,99 +1,62 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
+
 import { RegisterDto } from './dto/register.dto';
 import { VerifyRegistrationDto } from './dto/verify-registration.dto';
 import { LoginDto } from './dto/login.dto';
-
-import type { Request } from 'express';
-
-import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { LogoutDto } from './dto/logout.dto';
+import { VerifyLoginDto } from './dto/verify-login.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
-import { VerifyEnableTwoFactorDto } from './dto/verify-enable-2fa.dto';
-import type { AuthenticatedRequest } from '../shared/types/authenticated-request';
-import { DisableTwoFactorDto } from './dto/disable-2fa.dto';
-import { ResendTwoFactorDto } from './dto/resend-2fa.dto';
-import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+  ) {}
 
   @Post('register')
-  async register(@Body() dto: RegisterDto) {
+  register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('register/verify')
-  async verifyRegistration(@Body() dto: VerifyRegistrationDto) {
-    return this.authService.verifyRegistration(dto.phone, dto.code);
+  verifyRegistration(
+    @Body() dto: VerifyRegistrationDto,
+  ) {
+    return this.authService.verifyRegistration(dto);
   }
 
   @Post('login')
-  async login(@Body() dto: LoginDto) {
+  login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
 
-  @Get('me')
-  @UseGuards(JwtAuthGuard)
-  async me(@Req() request: Request) {
-    return request.user;
-  }
-
-  @Post('refresh')
-  async refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refresh(dto.refreshToken);
-  }
-
-  @Post('logout')
-  async logout(@Body() dto: LogoutDto) {
-    return this.authService.logout(dto.refreshToken);
-  }
-
-  @Post('2fa/verify')
-  async verifyTwoFactor(@Body() dto: VerifyTwoFactorDto) {
-    return this.authService.verifyTwoFactor(dto.challengeToken, dto.code);
+  @Post('login/verify')
+  verifyLogin(
+    @Body() dto: VerifyLoginDto,
+  ) {
+    return this.authService.verifyLogin(dto);
   }
 
   @Post('2fa/enable')
   @UseGuards(JwtAuthGuard)
-  async enableTwoFactor(@Req() request: AuthenticatedRequest) {
-    return this.authService.enableTwoFactor(request.user.id);
+  enableTwoFactor(@Req() req: any) {
+    return this.authService.enableTwoFactor(
+      req.user.id,
+    );
   }
 
-  @Post('2fa/enable/verify')
-  @UseGuards(JwtAuthGuard)
-  async verifyEnableTwoFactor(
-    @Req() request: AuthenticatedRequest,
-    @Body() dto: VerifyEnableTwoFactorDto,
+  @Post('2fa/verify')
+  verifyTwoFactor(
+    @Body() dto: VerifyTwoFactorDto,
   ) {
-    return this.authService.verifyEnableTwoFactor(request.user.id, dto.code);
-  }
-
-  @Post('2fa/disable')
-  @UseGuards(JwtAuthGuard)
-  async disableTwoFactor(
-    @Req() request: AuthenticatedRequest,
-    @Body() dto: DisableTwoFactorDto,
-  ) {
-    return this.authService.disableTwoFactor(request.user.id, dto.password);
-  }
-
-  @Post('2fa/resend')
-  async resendTwoFactor(@Body() dto: ResendTwoFactorDto) {
-    return this.authService.resendTwoFactorOtp(dto.challengeToken);
-  }
-
-  @Post('password/forgot')
-  async forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto.phone);
-  }
-
-  @Post('password/reset')
-  async resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto.phone, dto.code, dto.newPassword);
+    return this.authService.verifyTwoFactor(dto);
   }
 }

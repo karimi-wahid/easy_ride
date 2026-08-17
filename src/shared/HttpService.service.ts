@@ -1,18 +1,18 @@
 import {
   Injectable,
   Logger,
-  UnauthorizedException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 
-import { OtpPurpose } from '../shared/types/otp-purpose.enum';
+import { OtpPurpose } from './types/otp-purpose.enum';
 
 @Injectable()
-export class OtpService {
+export class OtpApiService {
   private readonly logger = new Logger(
-    OtpService.name,
+    OtpApiService.name,
   );
 
   private readonly otpServerUrl =
@@ -70,7 +70,7 @@ export class OtpService {
     phone: string,
     purpose: OtpPurpose,
     code: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -83,22 +83,8 @@ export class OtpService {
         ),
       );
 
-      if (!response.data?.success) {
-        throw new UnauthorizedException(
-          'Invalid or expired OTP',
-        );
-      }
-
-      this.logger.log(
-        `OTP verified for ${purpose} and ${phone}`,
-      );
+      return response.data?.success === true;
     } catch (error) {
-      if (
-        error instanceof UnauthorizedException
-      ) {
-        throw error;
-      }
-
       this.logger.error(
         `Failed to verify OTP for ${purpose} and ${phone}`,
         error instanceof Error
@@ -106,9 +92,7 @@ export class OtpService {
           : undefined,
       );
 
-      throw new UnauthorizedException(
-        'Invalid or expired OTP',
-      );
+      return false;
     }
   }
 }

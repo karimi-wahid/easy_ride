@@ -1,582 +1,481 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
-
+import { ConflictException, Injectable,Logger, UnauthorizedException,} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-
-import { EntityManager } from '@mikro-orm/postgresql';
+import { randomUUID } from 'crypto';
 import * as argon2 from 'argon2';
-
+import { generateSecret, generateURI,verify,} from 'otplib';
+import { User } from '../database/entities/user.entity';
+import { UserSession } from '../database/entities/user-session.entity';
+import { UserSecurityAction } from '../database/entities/user-security-action.entity';
+import { UserTwoFactor } from '../database/entities/user-two-factor.entity';
 import { OtpService } from '../otp/otp.service';
-import { OtpPurpose } from '../otp/types/otp-purpose.enum';
+import { OtpPurpose } from '../shared/types/otp-purpose.enum';
 import { RegisterDto } from './dto/register.dto';
-import { User } from 'src/entities/users/user.entity';
+import { VerifyRegistrationDto } from './dto/verify-registration.dto';
 import { LoginDto } from './dto/login.dto';
-import { ConfigService } from '@nestjs/config';
-import { AuthSession } from 'src/entities/auth-session/auth-session.entity';
+import { VerifyLoginDto } from './dto/verify-login.dto';
+import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
+import { EntityManager } from '@mikro-orm/postgresql';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly em: EntityManager,
-    private readonly otpService: OtpService,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
+    private readonly otpService: OtpService,
   ) {}
 
   async register(dto: RegisterDto) {
-    // this should be in dto
-    const phone = dto.phone.trim();
-
-    let user = await this.em.findOne(User, {
-      phone,
+    const existingUser = await this.em.findOne(User, {
+      phone: dto.phone,
+      deletedAt: null,
     });
 
-    if (user?.phoneVerifiedAt) {
+    if (existingUser) {
       throw new ConflictException(
-        'A user with this phone number already exists',
+        'Phone number is already registered',
       );
     }
 
-
-    //TOOD : we dont have password
-    const passwordHash = await argon2.hash(dto.password, {
-      type: argon2.argon2id,
-    });
-
-
-    // this is copleteley wrong . we should not have user in register
-    if (user) {
-      user.fullname = dto.fullname;
-      user.passwordHash = passwordHash;
-    } else {
-      user = this.em.create(User, {
-        fullname: dto.fullname,
-        phone,
-        passwordHash,
-        twoFactorEnabled: false,
+    const action = this.em.create(
+      UserSecurityAction,
+      {
+        id: randomUUID(),
+        user: null,
+        usedAt: null,
+        expiresAt: this.getExpiration(5),
+        secret: randomUUID(),
+        eventType: 'REGISTRATION',
+        ipAddress: null,
+        userAgent: null,
+        metadata: JSON.stringify({
+          fullname: dto.fullname,
+          phone: dto.phone,
+        }),
         createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-    }
+      },
+    );
 
-    await this.em.flush();
+    this.em.persist(action);
 
-    await this.otpService.sendOtp(phone, OtpPurpose.REGISTRATION);
-
-
-    // unneeceasery data
-    return {
-      success: true,
-      message: 'Registration started. OTP has been sent to your phone.',
-    };
-  }
-
-  async verifyRegistration(phone: string, code: string) {
-    // in dto
-    const normalizedPhone = phone.trim();
-
-    const user = await this.em.findOne(User, {
-      phone: normalizedPhone,
-    });
-
-    if (!user) {
-      throw new BadRequestException('Registration could not be verified');
-    }
-
-    if (user.phoneVerifiedAt) {
-      throw new ConflictException('Phone number is already verified');
-    }
-
-
-    // verify otp should be in our service not calling the mock server
-    await this.otpService.verifyOtp(
-      normalizedPhone,
+    await this.otpService.sendOtp(
+      dto.phone,
       OtpPurpose.REGISTRATION,
-      code,
     );
-
-    user.phoneVerifiedAt = new Date();
 
     await this.em.flush();
 
-    return {
-      success: true,
-      message: 'Phone number verified successfully',
-    };
+    this.logger.log(
+      `Registration OTP sent to ${dto.phone}`,
+    );
   }
 
-  async login(dto: LoginDto) {
-    const phone = dto.phone.trim();
-
-    const user = await this.em.findOne(User, {
-      phone,
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('Invalid phone number or password');
-    }
-
-    if (!user.phoneVerifiedAt) {
-      throw new UnauthorizedException('Phone number has not been verified');
-    }
-
-    const passwordValid = await argon2.verify(user.passwordHash, dto.password);
-
-    if (!passwordValid) {
-      throw new UnauthorizedException('Invalid phone number or password');
-    }
-
-    if (user.twoFactorEnabled) {
-      // we do not send otp
-      await this.otpService.sendOtp(user.phone, OtpPurpose.TWO_FACTOR);
-      // too complex for our solution . just need a basic token
-      // uuid , nonce token,nonce_token_purpose , type-> nonce_token. secret -> uuid. nonce_token_type -> two_factor_login
-      const challengeToken = await this.jwtService.signAsync(
-        {
-          sub: user.id,
-          purpose: '2FA_LOGIN',
+  async verifyRegistration(
+    dto: VerifyRegistrationDto,
+  ) {
+    const actions = await this.em.find(
+      UserSecurityAction,
+      {
+        eventType: 'REGISTRATION',
+        usedAt: null,
+      },
+      {
+        orderBy: {
+          createdAt: 'DESC',
         },
-        {
-          secret: this.configService.getOrThrow<string>('JWT_2FA_SECRET'),
-          expiresIn: '5m',
-        },
-      );
+      },
+    );
 
-      return {
-        success: true,
-        requiresTwoFactor: true,
-        challengeToken,
-        message: 'Two-factor authentication code has been sent to your phone.',
+    const action = actions.find((item) => {
+      if (item.expiresAt <= new Date()) {
+        return false;
+      }
+
+      const metadata = JSON.parse(
+        item.metadata ?? '{}',
+      ) as {
+        fullname?: string;
+        phone?: string;
       };
-    }
 
-    const accessToken = await this.jwtService.signAsync({
-      sub: user.id,
-      phone: user.phone,
+      return metadata.phone === dto.phone;
     });
 
-    const refreshToken = await this.createRefreshToken(user);
+    if (!action) {
+      throw new UnauthorizedException(
+        'Invalid or expired registration request',
+      );
+    }
 
-    await this.em.flush();
-
-    return {
-      success: true,
-      accessToken,
-      refreshToken: refreshToken.token,
+    const metadata = JSON.parse(
+      action.metadata ?? '{}',
+    ) as {
+      fullname?: string;
+      phone?: string;
     };
-  }
 
-  private async createRefreshToken(user: User): Promise<{
-    token: string;
-    session: AuthSession;
-  }> {
-    const token = await this.jwtService.signAsync(
+    if (!metadata.fullname || !metadata.phone) {
+      throw new UnauthorizedException();
+    }
+
+    await this.otpService.verifyOtp(
+      dto.phone,
+      OtpPurpose.REGISTRATION,
+      dto.code,
+    );
+
+    const existingUser = await this.em.findOne(
+      User,
       {
-        sub: user.id,
-      },
-      {
-        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
-        expiresIn: '30d',
+        phone: dto.phone,
+        deletedAt: null,
       },
     );
 
-    const refreshTokenHash = await argon2.hash(token);
+    if (existingUser) {
+      throw new ConflictException(
+        'Phone number is already registered',
+      );
+    }
 
-    const expiresAt = new Date();
-
-    expiresAt.setDate(expiresAt.getDate() + 30);
-
-    const session = this.em.create(AuthSession, {
-      userId: user.id,
-      refreshTokenHash,
-      expiresAt,
+    const user = this.em.create(User, {
+      id: randomUUID(),
+      fullname: metadata.fullname,
+      phone: metadata.phone,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
-    this.em.persist(session);
+    action.user = user;
+    action.usedAt = new Date();
 
-    return {
-      token,
-      session,
-    };
-  }
-
-  async refresh(refreshToken: string) {
-    let payload: {
-      sub: number;
-    };
-
-    try {
-      payload = await this.jwtService.verifyAsync(refreshToken, {
-        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
-      });
-    } catch {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    const sessions = await this.em.find(AuthSession, {
-      userId: payload.sub,
-      revokedAt: null,
-    });
-
-    let currentSession: AuthSession | undefined;
-
-    for (const session of sessions) {
-      if (session.expiresAt <= new Date()) {
-        continue;
-      }
-
-      const matches = await argon2.verify(
-        session.refreshTokenHash,
-        refreshToken,
-      );
-
-      if (matches) {
-        currentSession = session;
-        break;
-      }
-    }
-
-    if (!currentSession) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    const user = await this.em.findOne(User, {
-      id: payload.sub,
-    });
-
-    if (!user || !user.phoneVerifiedAt) {
-      throw new UnauthorizedException('User is not authorized');
-    }
-
-    // Revoke old session.
-
-    currentSession.revokedAt = new Date();
-
-    // Generate replacement refresh token.
-
-    const newRefreshToken = await this.createRefreshToken(user);
-
-    // Generate new access token.
-
-    const accessToken = await this.jwtService.signAsync({
-      sub: user.id,
-      phone: user.phone,
-    });
+    this.em.persist(user);
 
     await this.em.flush();
 
-    return {
-      success: true,
-      accessToken,
-      refreshToken: newRefreshToken.token,
-    };
+    this.logger.log(
+      `Registration verified for ${dto.phone}`,
+    );
   }
 
-  async logout(refreshToken: string) {
-    let payload: {
-      sub: number;
-    };
+  async login(dto: LoginDto) {
+    const user = await this.em.findOne(User, {
+      phone: dto.phone,
+      deletedAt: null,
+    });
 
-    try {
-      payload = await this.jwtService.verifyAsync(refreshToken, {
-        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
-      });
-    } catch {
+    if (!user) {
+      throw new UnauthorizedException(
+        'Invalid phone number',
+      );
+    }
+
+    await this.otpService.sendOtp(
+      user.phone,
+      OtpPurpose.LOGIN,
+    );
+
+    this.logger.log(
+      `Login OTP sent to ${user.phone}`,
+    );
+  }
+
+  async verifyLogin(
+    dto: VerifyLoginDto,
+  ) {
+    const user = await this.em.findOne(User, {
+      phone: dto.phone,
+      deletedAt: null,
+    });
+
+    if (!user) {
+      throw new UnauthorizedException(
+        'Invalid phone number',
+      );
+    }
+
+    await this.otpService.verifyOtp(
+      user.phone,
+      OtpPurpose.LOGIN,
+      dto.code,
+    );
+
+    const twoFactor = await this.em.findOne(
+      UserTwoFactor,
+      {
+        user,
+      },
+    );
+
+    if (twoFactor?.enabled) {
+      const challengeToken = randomUUID();
+
+      const action = this.em.create(
+        UserSecurityAction,
+        {
+          id: randomUUID(),
+          user,
+          usedAt: null,
+          expiresAt: this.getExpiration(5),
+          secret: challengeToken,
+          eventType: 'TWO_FACTOR_LOGIN',
+          ipAddress: null,
+          userAgent: null,
+          metadata: null,
+          createdAt: new Date(),
+        },
+      );
+
+      this.em.persist(action);
+
+      await this.em.flush();
+
+      this.logger.log(
+        `2FA challenge created for user ${user.id}`,
+      );
+
       return {
-        success: true,
-        message: 'Logged out successfully',
+        challengeToken,
       };
     }
 
-    const sessions = await this.em.find(AuthSession, {
-      userId: payload.sub,
-      revokedAt: null,
+    return this.createSession(user);
+  }
+
+  async enableTwoFactor(userId: string) {
+    const user = await this.em.findOne(User, {
+      id: userId,
+      deletedAt: null,
     });
 
-    for (const session of sessions) {
-      const matches = await argon2.verify(
-        session.refreshTokenHash,
-        refreshToken,
+    if (!user) {
+      throw new UnauthorizedException(
+        'User not found',
+      );
+    }
+
+    const existingTwoFactor =
+      await this.em.findOne(
+        UserTwoFactor,
+        {
+          user,
+        },
       );
 
-      if (matches) {
-        session.revokedAt = new Date();
-        break;
-      }
+    if (existingTwoFactor?.enabled) {
+      return {
+        secret: existingTwoFactor.secret,
+        otpauthUrl: generateURI({
+          issuer:
+            process.env.APP_NAME ?? 'Easy Ride',
+          label: user.phone,
+          secret: existingTwoFactor.secret,
+        }),
+      };
     }
+
+    const secret = generateSecret();
+
+    const otpauthUrl = generateURI({
+      issuer:
+        process.env.APP_NAME ?? 'Easy Ride',
+      label: user.phone,
+      secret,
+    });
+
+    if (existingTwoFactor) {
+      existingTwoFactor.secret = secret;
+      existingTwoFactor.enabled = new Date();
+      existingTwoFactor.updatedAt = new Date();
+
+      await this.em.flush();
+
+      this.logger.log(
+        `2FA enabled for user ${user.id}`,
+      );
+
+      return {
+        secret,
+        otpauthUrl,
+      };
+    }
+
+    const twoFactor = this.em.create(
+      UserTwoFactor,
+      {
+        id: randomUUID(),
+        user,
+        enabled: new Date(),
+        secret,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
+
+    this.em.persist(twoFactor);
 
     await this.em.flush();
 
+    this.logger.log(
+      `2FA enabled for user ${user.id}`,
+    );
+
     return {
-      success: true,
-      message: 'Logged out successfully',
+      secret,
+      otpauthUrl,
     };
   }
 
-  async verifyTwoFactor(challengeToken: string, code: string) {
-    let payload: {
-      sub: number;
-      purpose: string;
-    };
+  async verifyTwoFactor(
+    dto: VerifyTwoFactorDto,
+  ) {
+    const action =
+      await this.findValidAction(
+        dto.challengeToken,
+        'TWO_FACTOR_LOGIN',
+      );
 
-    try {
-      payload = await this.jwtService.verifyAsync(challengeToken, {
-        secret: this.configService.getOrThrow<string>('JWT_2FA_SECRET'),
-      });
-    } catch {
-      throw new UnauthorizedException('Invalid or expired 2FA challenge');
+    if (!action.user) {
+      throw new UnauthorizedException(
+        'Authentication user not found',
+      );
     }
 
-    if (payload.purpose !== '2FA_LOGIN') {
-      throw new UnauthorizedException('Invalid 2FA challenge');
+    const user = action.user;
+
+    const twoFactor = await this.em.findOne(
+      UserTwoFactor,
+      {
+        user,
+      },
+    );
+
+    if (!twoFactor) {
+      throw new UnauthorizedException(
+        'Two-factor authentication is not configured',
+      );
     }
 
-    const user = await this.em.findOne(User, {
-      id: payload.sub,
-    });
-
-    if (!user || !user.phoneVerifiedAt) {
-      throw new UnauthorizedException('User is not authorized');
-    }
-
-    if (!user.twoFactorEnabled) {
+    if (!twoFactor.enabled) {
       throw new UnauthorizedException(
         'Two-factor authentication is not enabled',
       );
     }
 
-    await this.otpService.verifyOtp(user.phone, OtpPurpose.TWO_FACTOR, code);
-
-    const accessToken = await this.jwtService.signAsync({
-      sub: user.id,
-      phone: user.phone,
+    const result = await verify({
+      secret: twoFactor.secret,
+      token: dto.code,
     });
 
-    const refreshToken = await this.createRefreshToken(user);
-
-    await this.em.flush();
-
-    return {
-      success: true,
-      accessToken,
-      refreshToken: refreshToken.token,
-    };
-  }
-
-  async enableTwoFactor(userId: number) {
-    const user = await this.em.findOne(User, {
-      id: userId,
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    if (!user.phoneVerifiedAt) {
-      throw new BadRequestException('Phone number must be verified first');
-    }
-
-    if (user.twoFactorEnabled) {
-      return {
-        success: true,
-        message: 'Two-factor authentication is already enabled',
-      };
-    }
-
-    await this.otpService.sendOtp(user.phone, OtpPurpose.TWO_FACTOR);
-
-    return {
-      success: true,
-      message: 'Verification code has been sent to your phone.',
-    };
-  }
-
-  async verifyEnableTwoFactor(userId: number, code: string) {
-    const user = await this.em.findOne(User, {
-      id: userId,
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    if (!user.phoneVerifiedAt) {
-      throw new BadRequestException('Phone number must be verified first');
-    }
-
-    if (user.twoFactorEnabled) {
-      throw new ConflictException(
-        'Two-factor authentication is already enabled',
+    if (!result.valid) {
+      throw new UnauthorizedException(
+        'Invalid two-factor authentication code',
       );
     }
 
-    await this.otpService.verifyOtp(user.phone, OtpPurpose.TWO_FACTOR, code);
-
-    user.twoFactorEnabled = true;
+    action.usedAt = new Date();
 
     await this.em.flush();
 
-    return {
-      success: true,
-      message: 'Two-factor authentication enabled successfully',
-    };
-  }
-
-  async disableTwoFactor(userId: number, password: string) {
-    const user = await this.em.findOne(User, {
-      id: userId,
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    if (!user.twoFactorEnabled) {
-      return {
-        success: true,
-        message: 'Two-factor authentication is already disabled',
-      };
-    }
-
-    const passwordValid = await argon2.verify(user.passwordHash, password);
-
-    if (!passwordValid) {
-      throw new UnauthorizedException('Invalid password');
-    }
-
-    user.twoFactorEnabled = false;
-
-    /*
-      Revoke existing sessions.
-     
-      This is important because changing
-      authentication security should invalidate
-      existing refresh sessions.
-     */
-    const sessions = await this.em.find(AuthSession, {
-      userId,
-      revokedAt: null,
-    });
-
-    for (const session of sessions) {
-      session.revokedAt = new Date();
-    }
-
-    await this.em.flush();
-
-    return {
-      success: true,
-      message: 'Two-factor authentication disabled successfully',
-    };
-  }
-
-  async resendTwoFactorOtp(challengeToken: string) {
-    let payload: {
-      sub: number;
-      purpose: string;
-    };
-
-    try {
-      payload = await this.jwtService.verifyAsync(challengeToken, {
-        secret: this.configService.getOrThrow<string>('JWT_2FA_SECRET'),
-      });
-    } catch {
-      throw new UnauthorizedException('Invalid or expired 2FA challenge');
-    }
-
-    if (payload.purpose !== '2FA_LOGIN') {
-      throw new UnauthorizedException('Invalid 2FA challenge');
-    }
-
-    const user = await this.em.findOne(User, {
-      id: payload.sub,
-    });
-
-    if (!user || !user.twoFactorEnabled) {
-      throw new UnauthorizedException('Invalid 2FA request');
-    }
-
-    await this.otpService.sendOtp(user.phone, OtpPurpose.TWO_FACTOR);
-
-    return {
-      success: true,
-      message: 'A new verification code has been sent to your phone.',
-    };
-  }
-
-  async forgotPassword(phone: string) {
-    const normalizedPhone = phone.trim();
-
-    const user = await this.em.findOne(User, {
-      phone: normalizedPhone,
-    });
-
-    // Don't reveal whether the account exists.
-
-    if (!user) {
-      return {
-        success: true,
-        message:
-          'If an account exists for this phone number, a password reset code has been sent.',
-      };
-    }
-
-    await this.otpService.sendOtp(normalizedPhone, OtpPurpose.PASSWORD_RESET);
-
-    return {
-      success: true,
-      message:
-        'If an account exists for this phone number, a password reset code has been sent.',
-    };
-  }
-
-  async resetPassword(phone: string, code: string, newPassword: string) {
-    const normalizedPhone = phone.trim();
-
-    // Verify the OTP first.
-
-    await this.otpService.verifyOtp(
-      normalizedPhone,
-      OtpPurpose.PASSWORD_RESET,
-      code,
+    this.logger.log(
+      `2FA login verified for user ${user.id}`,
     );
 
-    const user = await this.em.findOne(User, {
-      phone: normalizedPhone,
-    });
+    return this.createSession(user);
+  }
 
-    if (!user) {
-      throw new BadRequestException('Unable to reset password');
-    }
+  private async createSession(user: User) {
+    const accessToken =
+      await this.jwtService.signAsync({
+        sub: user.id,
+        phone: user.phone,
+      });
 
-    // Hash the new password.
+    const refreshToken =
+      await this.jwtService.signAsync(
+        {
+          sub: user.id,
+        },
+        {
+          secret:
+            process.env.JWT_REFRESH_SECRET,
+          expiresIn: '30d',
+        },
+      );
 
-    user.passwordHash = await argon2.hash(newPassword, {
-      type: argon2.argon2id,
-    });
+    const refreshTokenHash =
+      await argon2.hash(refreshToken);
 
-    //  Password changes invalidate existing sessions.
+    const expiresAt = new Date();
 
-    const sessions = await this.em.find(AuthSession, {
-      userId: user.id,
-      revokedAt: null,
-    });
+    expiresAt.setDate(
+      expiresAt.getDate() + 30,
+    );
 
-    for (const session of sessions) {
-      session.revokedAt = new Date();
-    }
+    const session = this.em.create(
+      UserSession,
+      {
+        id: randomUUID(),
+        user,
+        refreshTokenHash,
+        expiresAt,
+        revokedAt: null,
+        ipAddress: null,
+        userAgent: null,
+        createdAt: new Date(),
+      },
+    );
+
+    this.em.persist(session);
 
     await this.em.flush();
 
     return {
-      success: true,
-      message: 'Password reset successfully',
+      accessToken,
+      refreshToken,
     };
+  }
+
+  private async findValidAction(
+    secret: string,
+    eventType: string,
+  ) {
+    const action =
+      await this.em.findOne(
+        UserSecurityAction,
+        {
+          secret,
+          eventType,
+          usedAt: null,
+        },
+        {
+          populate: ['user'],
+        },
+      );
+
+    if (!action) {
+      throw new UnauthorizedException(
+        'Invalid or expired authentication request',
+      );
+    }
+
+    if (action.expiresAt <= new Date()) {
+      throw new UnauthorizedException(
+        'Authentication request has expired',
+      );
+    }
+
+    return action;
+  }
+
+  private getExpiration(minutes: number) {
+    const date = new Date();
+
+    date.setMinutes(
+      date.getMinutes() + minutes,
+    );
+
+    return date;
   }
 }
