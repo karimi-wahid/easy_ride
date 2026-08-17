@@ -7,9 +7,12 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { OtpModule } from '../otp/otp.module';
 import { User } from 'src/entities/users/user.entity';
+import { PassportModule } from '@nestjs/passport';
+import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
+    PassportModule,
     MikroOrmModule.forFeature([User]),
 
     OtpModule,
@@ -30,6 +33,6 @@ import { User } from 'src/entities/users/user.entity';
 
   controllers: [AuthController],
 
-  providers: [AuthService],
+  providers: [AuthService, JwtStrategy],
 })
 export class AuthModule {}
