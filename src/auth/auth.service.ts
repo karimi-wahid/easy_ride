@@ -28,6 +28,7 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    // this should be in dto
     const phone = dto.phone.trim();
 
     let user = await this.em.findOne(User, {
@@ -40,10 +41,14 @@ export class AuthService {
       );
     }
 
+
+    //TOOD : we dont have password
     const passwordHash = await argon2.hash(dto.password, {
       type: argon2.argon2id,
     });
 
+
+    // this is copleteley wrong . we should not have user in register
     if (user) {
       user.fullname = dto.fullname;
       user.passwordHash = passwordHash;
@@ -62,6 +67,8 @@ export class AuthService {
 
     await this.otpService.sendOtp(phone, OtpPurpose.REGISTRATION);
 
+
+    // unneeceasery data
     return {
       success: true,
       message: 'Registration started. OTP has been sent to your phone.',
@@ -69,6 +76,7 @@ export class AuthService {
   }
 
   async verifyRegistration(phone: string, code: string) {
+    // in dto
     const normalizedPhone = phone.trim();
 
     const user = await this.em.findOne(User, {
@@ -83,6 +91,8 @@ export class AuthService {
       throw new ConflictException('Phone number is already verified');
     }
 
+
+    // verify otp should be in our service not calling the mock server
     await this.otpService.verifyOtp(
       normalizedPhone,
       OtpPurpose.REGISTRATION,
@@ -121,8 +131,10 @@ export class AuthService {
     }
 
     if (user.twoFactorEnabled) {
+      // we do not send otp
       await this.otpService.sendOtp(user.phone, OtpPurpose.TWO_FACTOR);
-
+      // too complex for our solution . just need a basic token
+      // uuid , nonce token,nonce_token_purpose , type-> nonce_token. secret -> uuid. nonce_token_type -> two_factor_login
       const challengeToken = await this.jwtService.signAsync(
         {
           sub: user.id,

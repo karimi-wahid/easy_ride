@@ -43,3 +43,8 @@ export class User {
   })
   updatedAt: Date = new Date();
 }
+
+
+
+user_security_actions
+

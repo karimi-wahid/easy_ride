@@ -7,12 +7,12 @@ import { LoginDto } from './dto/login.dto';
 
 import type { Request } from 'express';
 
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { VerifyEnableTwoFactorDto } from './dto/verify-enable-2fa.dto';
-import type { AuthenticatedRequest } from './types/authenticated-request';
+import type { AuthenticatedRequest } from '../shared/types/authenticated-request';
 import { DisableTwoFactorDto } from './dto/disable-2fa.dto';
 import { ResendTwoFactorDto } from './dto/resend-2fa.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
