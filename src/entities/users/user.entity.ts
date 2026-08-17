@@ -15,17 +15,25 @@ export class User {
     fieldName: 'password_hash',
     type: 'string',
   })
-  passwordHash?: string;
+  passwordHash!: string;
+
+  @Property({
+    fieldName: 'phone_verified_at',
+    type: 'Date',
+    nullable: true,
+  })
+  phoneVerifiedAt?: Date;
 
   @Property({
     fieldName: 'created_at',
     type: 'Date',
   })
-  createdAt!: Date;
+  createdAt: Date = new Date();
 
   @Property({
     fieldName: 'updated_at',
     type: 'Date',
+    onUpdate: () => new Date(),
   })
-  updatedAt!: Date;
+  updatedAt: Date = new Date();
 }
