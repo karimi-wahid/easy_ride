@@ -11,7 +11,10 @@ import { User } from './user.entity';
 @Entity({ tableName: 'user_two_factor' })
 @Unique({ properties: ['user'] })
 export class UserTwoFactor {
-  @PrimaryKey({ type: 'uuid' })
+  @PrimaryKey({
+    type: 'uuid',
+    defaultRaw: 'gen_random_uuid()',
+  })
   id!: string;
 
   @OneToOne(() => User, {

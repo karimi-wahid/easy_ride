@@ -1,20 +1,32 @@
-import { ConflictException, Injectable,Logger, UnauthorizedException,} from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
 import * as argon2 from 'argon2';
-import { generateSecret, generateURI,verify,} from 'otplib';
+import {
+  generateSecret,
+  generateURI,
+  verify,
+} from 'otplib';
+
 import { User } from '../database/entities/user.entity';
 import { UserSession } from '../database/entities/user-session.entity';
 import { UserSecurityAction } from '../database/entities/user-security-action.entity';
 import { UserTwoFactor } from '../database/entities/user-two-factor.entity';
-import { OtpService } from '../otp/otp.service';
+
+import { OtpService } from '../shared/otp.service';
 import { OtpPurpose } from '../shared/types/otp-purpose.enum';
+
 import { RegisterDto } from './dto/register.dto';
 import { VerifyRegistrationDto } from './dto/verify-registration.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyLoginDto } from './dto/verify-login.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
-import { EntityManager } from '@mikro-orm/postgresql';
 
 @Injectable()
 export class AuthService {
@@ -41,7 +53,6 @@ export class AuthService {
     const action = this.em.create(
       UserSecurityAction,
       {
-        id: randomUUID(),
         user: null,
         usedAt: null,
         expiresAt: this.getExpiration(5),
@@ -140,7 +151,6 @@ export class AuthService {
     }
 
     const user = this.em.create(User, {
-      id: randomUUID(),
       fullname: metadata.fullname,
       phone: metadata.phone,
       createdAt: new Date(),
@@ -181,9 +191,7 @@ export class AuthService {
     );
   }
 
-  async verifyLogin(
-    dto: VerifyLoginDto,
-  ) {
+  async verifyLogin(dto: VerifyLoginDto) {
     const user = await this.em.findOne(User, {
       phone: dto.phone,
       deletedAt: null,
@@ -214,7 +222,6 @@ export class AuthService {
       const action = this.em.create(
         UserSecurityAction,
         {
-          id: randomUUID(),
           user,
           usedAt: null,
           expiresAt: this.getExpiration(5),
@@ -304,7 +311,6 @@ export class AuthService {
     const twoFactor = this.em.create(
       UserTwoFactor,
       {
-        id: randomUUID(),
         user,
         enabled: new Date(),
         secret,
@@ -416,7 +422,6 @@ export class AuthService {
     const session = this.em.create(
       UserSession,
       {
-        id: randomUUID(),
         user,
         refreshTokenHash,
         expiresAt,
