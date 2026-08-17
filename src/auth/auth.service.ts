@@ -15,6 +15,8 @@ import { OtpPurpose } from '../otp/types/otp-purpose.enum';
 import { RegisterDto } from './dto/register.dto';
 import { User } from 'src/entities/users/user.entity';
 import { LoginDto } from './dto/login.dto';
+import { ConfigService } from '@nestjs/config';
+import { AuthSession } from 'src/entities/auth-session/auth-session.entity';
 
 @Injectable()
 export class AuthService {
@@ -22,6 +24,7 @@ export class AuthService {
     private readonly em: EntityManager,
     private readonly otpService: OtpService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -122,9 +125,149 @@ export class AuthService {
       phone: user.phone,
     });
 
+    const refreshToken = await this.createRefreshToken(user);
+
     return {
       success: true,
       accessToken,
+      refreshToken: refreshToken.token,
+    };
+  }
+
+  private async createRefreshToken(user: User): Promise<{
+    token: string;
+    sessionId: number;
+  }> {
+    const token = await this.jwtService.signAsync(
+      {
+        sub: user.id,
+      },
+      {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+        expiresIn: '30d',
+      },
+    );
+
+    const refreshTokenHash = await argon2.hash(token);
+
+    const expiresAt = new Date();
+
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    const session = this.em.create(AuthSession, {
+      userId: user.id,
+      refreshTokenHash,
+      expiresAt,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    this.em.persist(session);
+    await this.em.flush();
+
+    return {
+      token,
+      sessionId: session.id,
+    };
+  }
+
+  async refresh(refreshToken: string) {
+    let payload: {
+      sub: number;
+    };
+
+    try {
+      payload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    const sessions = await this.em.find(AuthSession, {
+      userId: payload.sub,
+      revokedAt: null,
+    });
+
+    let session: AuthSession | undefined;
+
+    for (const candidate of sessions) {
+      if (candidate.expiresAt <= new Date()) {
+        continue;
+      }
+
+      const matches = await argon2.verify(
+        candidate.refreshTokenHash,
+        refreshToken,
+      );
+
+      if (matches) {
+        session = candidate;
+        break;
+      }
+    }
+
+    if (!session) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    const user = await this.em.findOne(User, {
+      id: payload.sub,
+    });
+
+    if (!user || !user.phoneVerifiedAt) {
+      throw new UnauthorizedException('User is not authorized');
+    }
+
+    const accessToken = await this.jwtService.signAsync({
+      sub: user.id,
+      phone: user.phone,
+    });
+
+    return {
+      success: true,
+      accessToken,
+    };
+  }
+
+  async logout(refreshToken: string) {
+    let payload: {
+      sub: number;
+    };
+
+    try {
+      payload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      return {
+        success: true,
+        message: 'Logged out successfully',
+      };
+    }
+
+    const sessions = await this.em.find(AuthSession, {
+      userId: payload.sub,
+      revokedAt: null,
+    });
+
+    for (const session of sessions) {
+      const matches = await argon2.verify(
+        session.refreshTokenHash,
+        refreshToken,
+      );
+
+      if (matches) {
+        session.revokedAt = new Date();
+        break;
+      }
+    }
+
+    await this.em.flush();
+
+    return {
+      success: true,
+      message: 'Logged out successfully',
     };
   }
 }

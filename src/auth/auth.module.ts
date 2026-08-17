@@ -9,11 +9,12 @@ import { OtpModule } from '../otp/otp.module';
 import { User } from 'src/entities/users/user.entity';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { AuthSession } from 'src/entities/auth-session/auth-session.entity';
 
 @Module({
   imports: [
     PassportModule,
-    MikroOrmModule.forFeature([User]),
+    MikroOrmModule.forFeature([User, AuthSession]),
 
     OtpModule,
 
