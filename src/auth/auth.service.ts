@@ -2,7 +2,10 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
+
+import { JwtService } from '@nestjs/jwt';
 
 import { EntityManager } from '@mikro-orm/postgresql';
 import * as argon2 from 'argon2';
@@ -11,12 +14,14 @@ import { OtpService } from '../otp/otp.service';
 import { OtpPurpose } from '../otp/types/otp-purpose.enum';
 import { RegisterDto } from './dto/register.dto';
 import { User } from 'src/entities/users/user.entity';
+import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly em: EntityManager,
     private readonly otpService: OtpService,
+    private readonly jwtService: JwtService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -88,6 +93,38 @@ export class AuthService {
     return {
       success: true,
       message: 'Phone number verified successfully',
+    };
+  }
+
+  async login(dto: LoginDto) {
+    const phone = dto.phone.trim();
+
+    const user = await this.em.findOne(User, {
+      phone,
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid phone number or password');
+    }
+
+    if (!user.phoneVerifiedAt) {
+      throw new UnauthorizedException('Phone number has not been verified');
+    }
+
+    const passwordValid = await argon2.verify(user.passwordHash, dto.password);
+
+    if (!passwordValid) {
+      throw new UnauthorizedException('Invalid phone number or password');
+    }
+
+    const accessToken = await this.jwtService.signAsync({
+      sub: user.id,
+      phone: user.phone,
+    });
+
+    return {
+      success: true,
+      accessToken,
     };
   }
 }
