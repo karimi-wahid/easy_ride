@@ -15,6 +15,8 @@ import { VerifyEnableTwoFactorDto } from './dto/verify-enable-2fa.dto';
 import type { AuthenticatedRequest } from './types/authenticated-request';
 import { DisableTwoFactorDto } from './dto/disable-2fa.dto';
 import { ResendTwoFactorDto } from './dto/resend-2fa.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -83,5 +85,15 @@ export class AuthController {
   @Post('2fa/resend')
   async resendTwoFactor(@Body() dto: ResendTwoFactorDto) {
     return this.authService.resendTwoFactorOtp(dto.challengeToken);
+  }
+
+  @Post('password/forgot')
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.phone);
+  }
+
+  @Post('password/reset')
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.phone, dto.code, dto.newPassword);
   }
 }

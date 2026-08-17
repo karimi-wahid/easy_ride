@@ -497,4 +497,74 @@ export class AuthService {
       message: 'A new verification code has been sent to your phone.',
     };
   }
+
+  async forgotPassword(phone: string) {
+    const normalizedPhone = phone.trim();
+
+    const user = await this.em.findOne(User, {
+      phone: normalizedPhone,
+    });
+
+    // Don't reveal whether the account exists.
+
+    if (!user) {
+      return {
+        success: true,
+        message:
+          'If an account exists for this phone number, a password reset code has been sent.',
+      };
+    }
+
+    await this.otpService.sendOtp(normalizedPhone, OtpPurpose.PASSWORD_RESET);
+
+    return {
+      success: true,
+      message:
+        'If an account exists for this phone number, a password reset code has been sent.',
+    };
+  }
+
+  async resetPassword(phone: string, code: string, newPassword: string) {
+    const normalizedPhone = phone.trim();
+
+    // Verify the OTP first.
+
+    await this.otpService.verifyOtp(
+      normalizedPhone,
+      OtpPurpose.PASSWORD_RESET,
+      code,
+    );
+
+    const user = await this.em.findOne(User, {
+      phone: normalizedPhone,
+    });
+
+    if (!user) {
+      throw new BadRequestException('Unable to reset password');
+    }
+
+    // Hash the new password.
+
+    user.passwordHash = await argon2.hash(newPassword, {
+      type: argon2.argon2id,
+    });
+
+    //  Password changes invalidate existing sessions.
+
+    const sessions = await this.em.find(AuthSession, {
+      userId: user.id,
+      revokedAt: null,
+    });
+
+    for (const session of sessions) {
+      session.revokedAt = new Date();
+    }
+
+    await this.em.flush();
+
+    return {
+      success: true,
+      message: 'Password reset successfully',
+    };
+  }
 }

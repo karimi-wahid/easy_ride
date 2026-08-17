@@ -201,3 +201,38 @@ Authorization: Bearer YOUR_ACCESS_TOKEN
 resend 2fa
 - Request
 POST /auth/2fa/resend
+
+
+----
+forgot password
+- Request
+POST /auth/password/forgot
+- Body
+{
+  "phone": "+93700000000"
+}
+- Response
+{
+  "success": true,
+  "message": "If an account exists for this phone number, a password reset code has been sent."
+}
+-Mock server
+[MOCK OTP] PASSWORD_RESET OTP for +93700000000: 483921
+
+----
+Reset password (use the otp)
+-Request
+POST /auth/password/reset
+
+-Body
+{
+  "phone": "+93700000000",
+  "code": "483921",
+  "newPassword": "NewStrongPassword123!"
+}
+
+- Response
+{
+  "success": true,
+  "message": "Password reset successfully"
+}
