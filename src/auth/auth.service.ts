@@ -127,6 +127,8 @@ export class AuthService {
 
     const refreshToken = await this.createRefreshToken(user);
 
+    await this.em.flush();
+
     return {
       success: true,
       accessToken,
@@ -136,7 +138,7 @@ export class AuthService {
 
   private async createRefreshToken(user: User): Promise<{
     token: string;
-    sessionId: number;
+    session: AuthSession;
   }> {
     const token = await this.jwtService.signAsync(
       {
@@ -163,11 +165,10 @@ export class AuthService {
     });
 
     this.em.persist(session);
-    await this.em.flush();
 
     return {
       token,
-      sessionId: session.id,
+      session,
     };
   }
 
@@ -189,25 +190,25 @@ export class AuthService {
       revokedAt: null,
     });
 
-    let session: AuthSession | undefined;
+    let currentSession: AuthSession | undefined;
 
-    for (const candidate of sessions) {
-      if (candidate.expiresAt <= new Date()) {
+    for (const session of sessions) {
+      if (session.expiresAt <= new Date()) {
         continue;
       }
 
       const matches = await argon2.verify(
-        candidate.refreshTokenHash,
+        session.refreshTokenHash,
         refreshToken,
       );
 
       if (matches) {
-        session = candidate;
+        currentSession = session;
         break;
       }
     }
 
-    if (!session) {
+    if (!currentSession) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
@@ -219,14 +220,27 @@ export class AuthService {
       throw new UnauthorizedException('User is not authorized');
     }
 
+    // Revoke old session.
+
+    currentSession.revokedAt = new Date();
+
+    // Generate replacement refresh token.
+
+    const newRefreshToken = await this.createRefreshToken(user);
+
+    // Generate new access token.
+
     const accessToken = await this.jwtService.signAsync({
       sub: user.id,
       phone: user.phone,
     });
 
+    await this.em.flush();
+
     return {
       success: true,
       accessToken,
+      refreshToken: newRefreshToken.token,
     };
   }
 
