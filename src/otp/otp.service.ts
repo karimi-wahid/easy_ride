@@ -45,6 +45,7 @@ export class OtpService {
       return response.data;
     } catch (error) {
       throw new InternalServerErrorException('Unable to verify OTP');
+      console.log(error);
     }
   }
 }

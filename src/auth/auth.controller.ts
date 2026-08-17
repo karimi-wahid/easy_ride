@@ -13,6 +13,8 @@ import { LogoutDto } from './dto/logout.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { VerifyEnableTwoFactorDto } from './dto/verify-enable-2fa.dto';
 import type { AuthenticatedRequest } from './types/authenticated-request';
+import { DisableTwoFactorDto } from './dto/disable-2fa.dto';
+import { ResendTwoFactorDto } from './dto/resend-2fa.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -57,7 +59,7 @@ export class AuthController {
   @Post('2fa/enable')
   @UseGuards(JwtAuthGuard)
   async enableTwoFactor(@Req() request: AuthenticatedRequest) {
-    return this.authService.enableTwoFactor(request.user!.id);
+    return this.authService.enableTwoFactor(request.user.id);
   }
 
   @Post('2fa/enable/verify')
@@ -66,6 +68,20 @@ export class AuthController {
     @Req() request: AuthenticatedRequest,
     @Body() dto: VerifyEnableTwoFactorDto,
   ) {
-    return this.authService.verifyEnableTwoFactor(request.user!.id, dto.code);
+    return this.authService.verifyEnableTwoFactor(request.user.id, dto.code);
+  }
+
+  @Post('2fa/disable')
+  @UseGuards(JwtAuthGuard)
+  async disableTwoFactor(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: DisableTwoFactorDto,
+  ) {
+    return this.authService.disableTwoFactor(request.user.id, dto.password);
+  }
+
+  @Post('2fa/resend')
+  async resendTwoFactor(@Body() dto: ResendTwoFactorDto) {
+    return this.authService.resendTwoFactorOtp(dto.challengeToken);
   }
 }

@@ -415,4 +415,86 @@ export class AuthService {
       message: 'Two-factor authentication enabled successfully',
     };
   }
+
+  async disableTwoFactor(userId: number, password: string) {
+    const user = await this.em.findOne(User, {
+      id: userId,
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!user.twoFactorEnabled) {
+      return {
+        success: true,
+        message: 'Two-factor authentication is already disabled',
+      };
+    }
+
+    const passwordValid = await argon2.verify(user.passwordHash, password);
+
+    if (!passwordValid) {
+      throw new UnauthorizedException('Invalid password');
+    }
+
+    user.twoFactorEnabled = false;
+
+    /*
+      Revoke existing sessions.
+     
+      This is important because changing
+      authentication security should invalidate
+      existing refresh sessions.
+     */
+    const sessions = await this.em.find(AuthSession, {
+      userId,
+      revokedAt: null,
+    });
+
+    for (const session of sessions) {
+      session.revokedAt = new Date();
+    }
+
+    await this.em.flush();
+
+    return {
+      success: true,
+      message: 'Two-factor authentication disabled successfully',
+    };
+  }
+
+  async resendTwoFactorOtp(challengeToken: string) {
+    let payload: {
+      sub: number;
+      purpose: string;
+    };
+
+    try {
+      payload = await this.jwtService.verifyAsync(challengeToken, {
+        secret: this.configService.getOrThrow<string>('JWT_2FA_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired 2FA challenge');
+    }
+
+    if (payload.purpose !== '2FA_LOGIN') {
+      throw new UnauthorizedException('Invalid 2FA challenge');
+    }
+
+    const user = await this.em.findOne(User, {
+      id: payload.sub,
+    });
+
+    if (!user || !user.twoFactorEnabled) {
+      throw new UnauthorizedException('Invalid 2FA request');
+    }
+
+    await this.otpService.sendOtp(user.phone, OtpPurpose.TWO_FACTOR);
+
+    return {
+      success: true,
+      message: 'A new verification code has been sent to your phone.',
+    };
+  }
 }
