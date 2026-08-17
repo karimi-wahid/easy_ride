@@ -10,6 +10,9 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { LogoutDto } from './dto/logout.dto';
+import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
+import { VerifyEnableTwoFactorDto } from './dto/verify-enable-2fa.dto';
+import type { AuthenticatedRequest } from './types/authenticated-request';
 
 @Controller('auth')
 export class AuthController {
@@ -44,5 +47,25 @@ export class AuthController {
   @Post('logout')
   async logout(@Body() dto: LogoutDto) {
     return this.authService.logout(dto.refreshToken);
+  }
+
+  @Post('2fa/verify')
+  async verifyTwoFactor(@Body() dto: VerifyTwoFactorDto) {
+    return this.authService.verifyTwoFactor(dto.challengeToken, dto.code);
+  }
+
+  @Post('2fa/enable')
+  @UseGuards(JwtAuthGuard)
+  async enableTwoFactor(@Req() request: AuthenticatedRequest) {
+    return this.authService.enableTwoFactor(request.user!.id);
+  }
+
+  @Post('2fa/enable/verify')
+  @UseGuards(JwtAuthGuard)
+  async verifyEnableTwoFactor(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: VerifyEnableTwoFactorDto,
+  ) {
+    return this.authService.verifyEnableTwoFactor(request.user!.id, dto.code);
   }
 }

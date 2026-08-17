@@ -52,7 +52,7 @@ export class AuthService {
         fullname: dto.fullname,
         phone,
         passwordHash,
-
+        twoFactorEnabled: false,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -118,6 +118,28 @@ export class AuthService {
 
     if (!passwordValid) {
       throw new UnauthorizedException('Invalid phone number or password');
+    }
+
+    if (user.twoFactorEnabled) {
+      await this.otpService.sendOtp(user.phone, OtpPurpose.TWO_FACTOR);
+
+      const challengeToken = await this.jwtService.signAsync(
+        {
+          sub: user.id,
+          purpose: '2FA_LOGIN',
+        },
+        {
+          secret: this.configService.getOrThrow<string>('JWT_2FA_SECRET'),
+          expiresIn: '5m',
+        },
+      );
+
+      return {
+        success: true,
+        requiresTwoFactor: true,
+        challengeToken,
+        message: 'Two-factor authentication code has been sent to your phone.',
+      };
     }
 
     const accessToken = await this.jwtService.signAsync({
@@ -282,6 +304,115 @@ export class AuthService {
     return {
       success: true,
       message: 'Logged out successfully',
+    };
+  }
+
+  async verifyTwoFactor(challengeToken: string, code: string) {
+    let payload: {
+      sub: number;
+      purpose: string;
+    };
+
+    try {
+      payload = await this.jwtService.verifyAsync(challengeToken, {
+        secret: this.configService.getOrThrow<string>('JWT_2FA_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired 2FA challenge');
+    }
+
+    if (payload.purpose !== '2FA_LOGIN') {
+      throw new UnauthorizedException('Invalid 2FA challenge');
+    }
+
+    const user = await this.em.findOne(User, {
+      id: payload.sub,
+    });
+
+    if (!user || !user.phoneVerifiedAt) {
+      throw new UnauthorizedException('User is not authorized');
+    }
+
+    if (!user.twoFactorEnabled) {
+      throw new UnauthorizedException(
+        'Two-factor authentication is not enabled',
+      );
+    }
+
+    await this.otpService.verifyOtp(user.phone, OtpPurpose.TWO_FACTOR, code);
+
+    const accessToken = await this.jwtService.signAsync({
+      sub: user.id,
+      phone: user.phone,
+    });
+
+    const refreshToken = await this.createRefreshToken(user);
+
+    await this.em.flush();
+
+    return {
+      success: true,
+      accessToken,
+      refreshToken: refreshToken.token,
+    };
+  }
+
+  async enableTwoFactor(userId: number) {
+    const user = await this.em.findOne(User, {
+      id: userId,
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!user.phoneVerifiedAt) {
+      throw new BadRequestException('Phone number must be verified first');
+    }
+
+    if (user.twoFactorEnabled) {
+      return {
+        success: true,
+        message: 'Two-factor authentication is already enabled',
+      };
+    }
+
+    await this.otpService.sendOtp(user.phone, OtpPurpose.TWO_FACTOR);
+
+    return {
+      success: true,
+      message: 'Verification code has been sent to your phone.',
+    };
+  }
+
+  async verifyEnableTwoFactor(userId: number, code: string) {
+    const user = await this.em.findOne(User, {
+      id: userId,
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!user.phoneVerifiedAt) {
+      throw new BadRequestException('Phone number must be verified first');
+    }
+
+    if (user.twoFactorEnabled) {
+      throw new ConflictException(
+        'Two-factor authentication is already enabled',
+      );
+    }
+
+    await this.otpService.verifyOtp(user.phone, OtpPurpose.TWO_FACTOR, code);
+
+    user.twoFactorEnabled = true;
+
+    await this.em.flush();
+
+    return {
+      success: true,
+      message: 'Two-factor authentication enabled successfully',
     };
   }
 }

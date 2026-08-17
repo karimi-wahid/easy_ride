@@ -25,6 +25,12 @@ export class User {
   phoneVerifiedAt?: Date;
 
   @Property({
+    fieldName: 'two_factor_enabled',
+    type: 'boolean',
+  })
+  twoFactorEnabled: boolean = false;
+
+  @Property({
     fieldName: 'created_at',
     type: 'Date',
   })
