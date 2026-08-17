@@ -4,8 +4,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 
-import { OtpApiService } from '../shared/HttpService.service';
-import { OtpPurpose } from '../shared/types/otp-purpose.enum';
+import { OtpApiService } from './HttpService.service';
+import { OtpPurpose } from './types/otp-purpose.enum';
 
 @Injectable()
 export class OtpService {

@@ -8,8 +8,8 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 
 import { JwtStrategy } from '../shared/strategies/jwt.strategy';
+import { SharedModule } from '../shared/shared.module';
 
-import { OtpModule } from '../otp/otp.module';
 import { UsersModule } from '../users/users.module';
 
 import { User } from '../database/entities/user.entity';
@@ -21,8 +21,8 @@ import { UserTwoFactor } from '../database/entities/user-two-factor.entity';
   imports: [
     ConfigModule,
     UsersModule,
-    OtpModule,
     PassportModule,
+    SharedModule,
 
     MikroOrmModule.forFeature([
       User,

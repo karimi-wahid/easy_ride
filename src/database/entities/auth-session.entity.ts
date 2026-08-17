@@ -1,4 +1,8 @@
-import { Entity, PrimaryKey, Property } from '@mikro-orm/decorators/legacy';
+import {
+  Entity,
+  PrimaryKey,
+  Property,
+} from '@mikro-orm/decorators/legacy';
 
 @Entity({ tableName: 'auth_sessions' })
 export class AuthSession {
