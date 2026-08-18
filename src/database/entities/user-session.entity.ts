@@ -4,7 +4,6 @@ import {
   Property,
   ManyToOne,
 } from '@mikro-orm/decorators/legacy';
-
 import { User } from './user.entity';
 
 @Entity({ tableName: 'user_session' })

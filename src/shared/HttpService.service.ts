@@ -3,10 +3,8 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-
 import { OtpPurpose } from './types/otp-purpose.enum';
 
 @Injectable()
@@ -25,6 +23,7 @@ export class OtpApiService {
   async sendOtp(
     phone: string,
     purpose: OtpPurpose,
+    code: string,
   ): Promise<void> {
     try {
       const response = await firstValueFrom(
@@ -33,6 +32,7 @@ export class OtpApiService {
           {
             phone,
             purpose,
+            code,
           },
         ),
       );
@@ -63,36 +63,6 @@ export class OtpApiService {
       throw new ServiceUnavailableException(
         'Unable to send OTP',
       );
-    }
-  }
-
-  async verifyOtp(
-    phone: string,
-    purpose: OtpPurpose,
-    code: string,
-  ): Promise<boolean> {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.otpServerUrl}/verify`,
-          {
-            phone,
-            purpose,
-            code,
-          },
-        ),
-      );
-
-      return response.data?.success === true;
-    } catch (error) {
-      this.logger.error(
-        `Failed to verify OTP for ${purpose} and ${phone}`,
-        error instanceof Error
-          ? error.stack
-          : undefined,
-      );
-
-      return false;
     }
   }
 }
