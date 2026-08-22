@@ -8,19 +8,13 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
 import * as argon2 from 'argon2';
-import {
-  generateSecret,
-  generateURI,
-  verify,
-} from 'otplib';
-
+import {generateSecret,generateURI,verify,} from 'otplib';
 import { User } from '../database/entities/user.entity';
 import { UserSession } from '../database/entities/user-session.entity';
 import { UserSecurityAction } from '../database/entities/user-security-action.entity';
 import { UserTwoFactor } from '../database/entities/user-two-factor.entity';
 import { OtpService } from '../shared/otp.service';
 import { OtpPurpose } from '../shared/types/otp-purpose.enum';
-
 import { RegisterDto } from './dto/register.dto';
 import { VerifyRegistrationDto } from './dto/verify-registration.dto';
 import { LoginDto } from './dto/login.dto';
