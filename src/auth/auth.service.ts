@@ -8,7 +8,11 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
 import * as argon2 from 'argon2';
-import {generateSecret,generateURI,verify,} from 'otplib';
+import {
+  generateSecret,
+  generateURI,
+  verify,
+} from 'otplib';
 import { User } from '../database/entities/user.entity';
 import { UserSession } from '../database/entities/user-session.entity';
 import { UserSecurityAction } from '../database/entities/user-security-action.entity';
@@ -145,6 +149,7 @@ export class AuthService {
       id: randomUUID(),
       fullname: metadata.fullname,
       phone: metadata.phone,
+      phoneVerifiedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
