@@ -1,1 +1,0 @@
-RustFS upload test from Easy Ride
