@@ -38,6 +38,13 @@ export class User {
   deletedAt?: Date | null;
 
   @Property({
+    type: 'number',
+    nullable: true,
+    fieldName: 'attachment_id',
+  })
+  attachmentId?: string | null;
+
+  @Property({
     type: 'datetime',
     fieldName: 'created_at',
   })
