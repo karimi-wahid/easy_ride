@@ -95,7 +95,8 @@ export class AuthService {
     );
 
     const action = actions.find((item) => {
-      if (item.expiresAt <= new Date()) {
+      
+      if (item.expiresAt >= new Date()) {
         return false;
       }
 
@@ -105,6 +106,9 @@ export class AuthService {
         fullname?: string;
         phone?: string;
       };
+      this.logger.log(metadata.phone == dto.phone)
+
+      this.logger.log(metadata.phone , dto.phone)
 
       return metadata.phone === dto.phone;
     });

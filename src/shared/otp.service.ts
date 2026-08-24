@@ -45,6 +45,14 @@ export class OtpService {
       verified: false,
     });
 
+    this.logger.log({
+    action: 'OTP_STORED',
+    phone,
+    purpose,
+    code,
+    count: this.otps.length,
+  });
+
     await this.otpApiService.sendOtp(
       phone,
       purpose,
@@ -61,12 +69,15 @@ export class OtpService {
     purpose: OtpPurpose,
     code: string,
   ): Promise<void> {
+    
     const otp = this.otps.find(
       (item) =>
         item.phone === phone &&
         item.purpose === purpose &&
         !item.verified,
     );
+
+    this.logger.log(otp)
 
     if (!otp) {
       throw new UnauthorizedException(
