@@ -19,13 +19,13 @@ import { UserSecurityAction } from '../../database/entities/user-security-action
 import { UserTwoFactor } from '../../database/entities/user-two-factor.entity';
 import { OtpService } from '../../shared/otp.service';
 import { OtpPurpose } from '../../shared/types/otp-purpose.enum';
-import { RegisterDto } from './dto/register.dto';
-import { VerifyRegistrationDto } from './dto/verify-registration.dto';
-import { LoginDto } from './dto/login.dto';
-import { VerifyLoginDto } from './dto/verify-login.dto';
-import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
-import { VerifyTwoFactorSetupDto } from './dto/verify-2fa-setup.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { RegisterDto } from '../../users/auth/dto/register.dto';
+import { VerifyRegistrationDto } from '../../users/auth/dto/verify-registration.dto';
+import { LoginDto } from '../../users/auth/dto/login.dto';
+import { VerifyLoginDto } from '../../users/auth/dto/verify-login.dto';
+import { VerifyTwoFactorDto } from '../../users/auth/dto/verify-2fa.dto';
+import { VerifyTwoFactorSetupDto } from '../../users/auth/dto/verify-2fa-setup.dto';
+import { RefreshTokenDto } from '../../users/auth/dto/refresh-token.dto';
 
 @Injectable()
 export class AuthService {

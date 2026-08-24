@@ -11,15 +11,15 @@ import { AuthService } from './auth.service';
 
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 
-import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { RegisterDto } from './dto/register.dto';
-import { VerifyRegistrationDto } from './dto/verify-registration.dto';
-import { LoginDto } from './dto/login.dto';
-import { VerifyLoginDto } from './dto/verify-login.dto';
-import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
-import { VerifyTwoFactorSetupDto } from './dto/verify-2fa-setup.dto';
+import { RefreshTokenDto } from '../../users/auth/dto/refresh-token.dto';
+import { RegisterDto } from '../../users/auth/dto/register.dto';
+import { VerifyRegistrationDto } from '../../users/auth/dto/verify-registration.dto';
+import { LoginDto } from '../../users/auth/dto/login.dto';
+import { VerifyLoginDto } from '../../users/auth/dto/verify-login.dto';
+import { VerifyTwoFactorDto } from '../../users/auth/dto/verify-2fa.dto';
+import { VerifyTwoFactorSetupDto } from '../../users/auth/dto/verify-2fa-setup.dto';
 
-@Controller('auth/driver')
+@Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
@@ -56,8 +56,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@Req() req: any) {
     return this.authService.getMe(
-      req.driver.id,
-      req.driver.sessionId,
+      req.user.id,
+      req.user.sessionId,
     );
   }
 
@@ -65,8 +65,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   logout(@Req() req: any) {
     return this.authService.logout(
-      req.driver.id,
-      req.driver.sessionId,
+      req.user.id,
+      req.user.sessionId,
     );
   }
 
@@ -74,7 +74,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   enableTwoFactor(@Req() req: any) {
     return this.authService.enableTwoFactor(
-      req.driver.id,
+      req.user.id,
     );
   }
 
@@ -85,7 +85,7 @@ export class AuthController {
     @Body() dto: VerifyTwoFactorSetupDto,
   ) {
     return this.authService.verifyTwoFactorSetup(
-      req.driver.id,
+      req.user.id,
       dto,
     );
   }
