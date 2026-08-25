@@ -96,7 +96,7 @@ export class AuthService {
 
     const action = actions.find((item) => {
       
-      if (item.expiresAt >= new Date()) {
+      if (item.expiresAt <= new Date()) {
         return false;
       }
 
