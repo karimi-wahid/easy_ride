@@ -9,15 +9,15 @@ import {
 
 import { AuthService } from './auth.service';
 
-import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 
-import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { RegisterDto } from './dto/register.dto';
-import { VerifyRegistrationDto } from './dto/verify-registration.dto';
-import { LoginDto } from './dto/login.dto';
-import { VerifyLoginDto } from './dto/verify-login.dto';
-import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
-import { VerifyTwoFactorSetupDto } from './dto/verify-2fa-setup.dto';
+import { RefreshTokenDto } from '../../users/auth/dto/refresh-token.dto';
+import { RegisterDto } from '../../users/auth/dto/register.dto';
+import { VerifyRegistrationDto } from '../../users/auth/dto/verify-registration.dto';
+import { LoginDto } from '../../users/auth/dto/login.dto';
+import { VerifyLoginDto } from '../../users/auth/dto/verify-login.dto';
+import { VerifyTwoFactorDto } from '../../users/auth/dto/verify-2fa.dto';
+import { VerifyTwoFactorSetupDto } from '../../users/auth/dto/verify-2fa-setup.dto';
 
 @Controller('auth')
 export class AuthController {

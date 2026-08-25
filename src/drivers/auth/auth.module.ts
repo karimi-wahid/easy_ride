@@ -5,30 +5,30 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { PassportModule } from '@nestjs/passport';
 
 import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
+import { AuthService } from '../auth/auth.service';
 
-import { JwtStrategy } from '../shared/strategies/jwt.strategy';
-import { SharedModule } from '../shared/shared.module';
+import { JwtStrategy } from '../../shared/strategies/jwt.strategy';
+import { SharedModule } from '../../shared/shared.module';
 
-import { UsersModule } from '../users/users.module';
+import { DriversModule } from '../drivers.module';
 
-import { User } from '../database/entities/user.entity';
-import { UserSession } from '../database/entities/user-session.entity';
-import { UserSecurityAction } from '../database/entities/user-security-action.entity';
-import { UserTwoFactor } from '../database/entities/user-two-factor.entity';
+import { Driver } from '../../database/entities/driver.entity';
+import { DriverSession } from '../../database/entities/driver-session.entity';
+import { DriverSecurityAction } from '../../database/entities/driver-security-action.entity';
+import { DriverTwoFactor } from '../../database/entities/driver-two-factor.entity';
 
 @Module({
   imports: [
     ConfigModule,
-    UsersModule,
+    DriversModule,
     PassportModule,
     SharedModule,
 
     MikroOrmModule.forFeature([
-      User,
-      UserSession,
-      UserSecurityAction,
-      UserTwoFactor,
+      Driver,
+      DriverSession,
+      DriverSecurityAction,
+      DriverTwoFactor,
     ]),
 
     JwtModule.registerAsync({
@@ -56,4 +56,4 @@ import { UserTwoFactor } from '../database/entities/user-two-factor.entity';
     JwtStrategy,
   ],
 })
-export class AuthModule {}
+export class DriverAuthModule {}

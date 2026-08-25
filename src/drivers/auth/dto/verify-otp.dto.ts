@@ -4,7 +4,7 @@ import {
   Matches,
 } from 'class-validator';
 
-import { OtpPurpose } from '../../shared/types/otp-purpose.enum';
+import { OtpPurpose } from '../../../shared/types/otp-purpose.enum';
 
 export class VerifyOtpDto {
   @IsString()

@@ -39,8 +39,7 @@ POST http://localhost:3000/auth/register
 -Body
 {
   "fullname": "John Doe",
-  "phone": "+93700000000",
-  "password": "StrongPassword123!"
+  "phone": "+93700000000"
 }
 
 - Response
