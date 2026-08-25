@@ -3,4 +3,5 @@ export enum OtpPurpose {
   LOGIN = 'LOGIN',
   PASSWORD_RESET = 'PASSWORD_RESET',
   TWO_FACTOR = 'TWO_FACTOR',
+   PHONE_CHANGE = 'PHONE_CHANGE',
 }
