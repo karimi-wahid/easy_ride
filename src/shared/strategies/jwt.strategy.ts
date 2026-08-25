@@ -38,7 +38,8 @@ export class JwtStrategy extends PassportStrategy(
     sub: string;
     phone: string;
     sid: string;
-  }) {
+  }) 
+  {
     if (
       !payload.sub ||
       !payload.phone ||
@@ -62,7 +63,7 @@ export class JwtStrategy extends PassportStrategy(
 
     if (!session) {
       throw new UnauthorizedException(
-        'Session is invalid or revoked',
+        'Session is invalid or revoked 1',
       );
     }
 

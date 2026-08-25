@@ -18,7 +18,7 @@ export class DriverTwoFactor {
   id!: string;
 
   @OneToOne(() => Driver, {
-    fieldName: 'user_id',
+    fieldName: 'driver_id',
     nullable: false,
   })
   driver!: Driver;

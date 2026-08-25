@@ -2,14 +2,13 @@ import {
   Body,
   Controller,
   Get,
+  Logger,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
 
 import { AuthService } from './auth.service';
-
-import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 
 import { RefreshTokenDto } from '../../drivers/auth/dto/refresh-token.dto';
 import { RegisterDto } from '../../drivers/auth/dto/register.dto';
@@ -18,6 +17,7 @@ import { LoginDto } from '../../drivers/auth/dto/login.dto';
 import { VerifyLoginDto } from '../../drivers/auth/dto/verify-login.dto';
 import { VerifyTwoFactorDto } from '../../drivers/auth/dto/verify-2fa.dto';
 import { VerifyTwoFactorSetupDto } from '../../drivers/auth/dto/verify-2fa-setup.dto';
+import { DriverJwtAuthGuard } from 'src/shared/guards/driver-jwt-auth.guard';
 
 @Controller('auth/driver')
 export class AuthController {
@@ -53,7 +53,7 @@ export class AuthController {
   }
 
   @Get('me')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DriverJwtAuthGuard)
   me(@Req() req: any) {
     return this.authService.getMe(
       req.driver.id,
@@ -62,7 +62,7 @@ export class AuthController {
   }
 
   @Post('logout')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DriverJwtAuthGuard)
   logout(@Req() req: any) {
     return this.authService.logout(
       req.driver.id,
@@ -71,21 +71,21 @@ export class AuthController {
   }
 
   @Post('2fa/enable')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DriverJwtAuthGuard)
   enableTwoFactor(@Req() req: any) {
     return this.authService.enableTwoFactor(
-      req.driver.id,
+      req.user.id,
     );
   }
 
   @Post('2fa/enable/verify')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DriverJwtAuthGuard)
   verifyTwoFactorSetup(
     @Req() req: any,
     @Body() dto: VerifyTwoFactorSetupDto,
   ) {
     return this.authService.verifyTwoFactorSetup(
-      req.driver.id,
+      req.user.id,
       dto,
     );
   }
