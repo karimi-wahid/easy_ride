@@ -3,11 +3,12 @@ import {
   PrimaryKey,
   Property,
 } from '@mikro-orm/decorators/legacy';
+import { randomUUID } from 'crypto';
 
 @Entity({ tableName: 'users' })
 export class User {
   @PrimaryKey({ type: 'uuid' })
-  id!: string;
+  id: string = randomUUID();
 
   @Property({
     type: 'string',
@@ -35,6 +36,13 @@ export class User {
     fieldName: 'deleted_at',
   })
   deletedAt?: Date | null;
+
+  @Property({
+    type: 'number',
+    nullable: true,
+    fieldName: 'attachment_id',
+  })
+  attachmentId?: string | null;
 
   @Property({
     type: 'datetime',
