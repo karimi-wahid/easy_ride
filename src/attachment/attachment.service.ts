@@ -45,7 +45,7 @@ export class AttachmentService {
       try {
         await this.objectStorage.delete(objectKey);
       } catch {
-        // Ignore cleanup error.
+       
       }
 
       throw error;
