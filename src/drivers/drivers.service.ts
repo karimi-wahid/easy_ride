@@ -64,6 +64,7 @@ export class DriversService {
   }
 
   async getMe(driverId: string) {
+    this.logger.log(driverId)
     const driver = await this.em.findOne(Driver, {
       id: driverId,
       deletedAt: null,
@@ -180,6 +181,7 @@ export class DriversService {
     );
 
     this.em.persist(action);
+
 
     await this.otpService.sendOtp(
       phone,

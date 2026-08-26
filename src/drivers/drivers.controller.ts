@@ -14,9 +14,8 @@ import { UpdateDriverProfileDto } from './profile/dto/updateDriverProfileDto';
 import { RequestPhoneOtpDto } from './profile/dto/RequestPhoneOtpDto';
 import { VerifyPhoneChangeDto } from './profile/dto/VerifyPhoneChangeDto';
 
-import { JwtAuthGuard } from 'src/shared/guards/jwt-auth.guard';
-
 import type { AuthenticatedRequest } from 'src/shared/types/authenticated-request';
+import { DriverJwtAuthGuard } from 'src/shared/guards/driver-jwt-auth.guard';
 
 @Controller('drivers')
 export class DriversController {
@@ -25,7 +24,7 @@ export class DriversController {
   ) {}
 
   @Get('me')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DriverJwtAuthGuard)
   async getMe(
     @Req() req: AuthenticatedRequest,
   ) {
@@ -35,7 +34,7 @@ export class DriversController {
   }
 
   @Patch('profile')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DriverJwtAuthGuard)
   async updateProfile(
     @Req() req: AuthenticatedRequest,
     @Body() dto: UpdateDriverProfileDto,
@@ -47,7 +46,7 @@ export class DriversController {
   }
 
   @Post('profile/phone/request-otp')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DriverJwtAuthGuard)
   async requestPhoneOtp(
     @Req() req: AuthenticatedRequest,
     @Body() dto: RequestPhoneOtpDto,
@@ -59,7 +58,7 @@ export class DriversController {
   }
 
   @Post('profile/phone/verify')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(DriverJwtAuthGuard)
   async verifyPhoneChange(
     @Req() req: AuthenticatedRequest,
     @Body() dto: VerifyPhoneChangeDto,
