@@ -37,6 +37,8 @@ export class OtpApiService {
         ),
       );
 
+      this.logger.log("response", response)
+
       if (!response.data?.success) {
         throw new ServiceUnavailableException(
           'Unable to send OTP',

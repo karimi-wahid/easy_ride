@@ -2,18 +2,21 @@ import {
   Entity,
   PrimaryKey,
   Property,
+  ManyToOne,
 } from '@mikro-orm/decorators/legacy';
+
+import { Driver } from './driver.entity';
 
 @Entity({ tableName: 'driver_auth_sessions' })
 export class DriverAuthSession {
-  @PrimaryKey({ type: 'number' })
-  id!: number;
 
-  @Property({
+  @PrimaryKey({ type: 'uuid' })
+  id!: string;
+
+  @ManyToOne(() => Driver, {
     fieldName: 'driver_id',
-    type: 'number',
   })
-  userId!: number;
+  driver!: Driver;
 
   @Property({
     fieldName: 'refresh_token_hash',
@@ -32,7 +35,7 @@ export class DriverAuthSession {
     type: 'Date',
     nullable: true,
   })
-  revokedAt?: Date;
+  revokedAt?: Date | null;
 
   @Property({
     fieldName: 'created_at',

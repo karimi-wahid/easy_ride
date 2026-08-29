@@ -18,10 +18,10 @@ export class DriverTwoFactor {
   id!: string;
 
   @OneToOne(() => Driver, {
-  fieldName: 'driver_id',
-  nullable: false,
-})
-driver!: Driver;
+    fieldName: 'driver_id',
+    nullable: false,
+  })
+  driver!: Driver;
 
   @Property({
     type: 'datetime',

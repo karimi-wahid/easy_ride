@@ -26,6 +26,7 @@ import { VerifyLoginDto } from '../../drivers/auth/dto/verify-login.dto';
 import { VerifyTwoFactorDto } from '../../drivers/auth/dto/verify-2fa.dto';
 import { VerifyTwoFactorSetupDto } from '../../drivers/auth/dto/verify-2fa-setup.dto';
 import { RefreshTokenDto } from '../../drivers/auth/dto/refresh-token.dto';
+import { DriverAuthSession } from 'src/database/entities/driver-auth-session.entity';
 
 @Injectable()
 export class AuthService {
@@ -203,6 +204,11 @@ export class AuthService {
       );
     }
 
+    this.logger.debug({
+  driverId: driver.id,
+  driverPhone: driver.phone,
+});
+
     await this.otpService.verifyOtp(
       driver.phone,
       OtpPurpose.LOGIN,
@@ -210,11 +216,14 @@ export class AuthService {
     );
 
     const twoFactor = await this.em.findOne(
-      DriverTwoFactor,
-      {
-        driver,
-      },
-    );
+  DriverTwoFactor,
+  {
+    driver: driver.id,
+  },
+);
+this.logger.debug({
+  twoFactor,
+});
 
     if (twoFactor?.enabled) {
       const challengeToken = randomUUID();
@@ -573,11 +582,22 @@ export class AuthService {
         'Invalid 2FA setup data',
       );
     }
-
+    this.logger.debug({
+  action: 'TWO_FACTOR_VERIFY',
+  driverId,
+  setupToken: dto.setupToken,
+  code: dto.code,
+  secret: metadata.secret,
+});
     const result = await verify({
       secret: metadata.secret,
       token: dto.code,
     });
+
+    this.logger.debug({
+  action: 'TWO_FACTOR_RESULT',
+  result,
+});
 
     if (!result.valid) {
       throw new UnauthorizedException(
@@ -614,6 +634,12 @@ export class AuthService {
     action.usedAt = new Date();
 
     await this.em.flush();
+    this.logger.debug({
+  action: 'TWO_FACTOR_BEFORE_SAVE',
+  driverId: action.driver?.id,
+  secret: metadata.secret,
+  enabled: twoFactor.enabled,
+});
 
     return {
       enabled: true,
@@ -668,60 +694,58 @@ export class AuthService {
   }
 
   private async createSession(driver: Driver) {
-    const sessionId = randomUUID();
+  const sessionId = randomUUID();
 
-    const refreshToken =
-      await this.jwtService.signAsync(
-        {
-          sub: driver.id,
-          sid: sessionId,
-        },
-        {
-          secret: process.env.JWT_REFRESH_SECRET,
-          expiresIn: '30d',
-        },
-      );
-
-    const refreshTokenHash =
-      await argon2.hash(refreshToken);
-
-    const expiresAt = new Date();
-
-    expiresAt.setDate(
-      expiresAt.getDate() + 30,
-    );
-
-    const session = this.em.create(
-      DriverSession,
+  const refreshToken =
+    await this.jwtService.signAsync(
       {
-        id: sessionId,
-        driver,
-        refreshTokenHash,
-        expiresAt,
-        revokedAt: null,
-        ipAddress: null,
-        userAgent: null,
-        createdAt: new Date(),
+        sub: driver.id,
+        sid: sessionId,
+      },
+      {
+        secret: process.env.JWT_REFRESH_SECRET,
+        expiresIn: '30d',
       },
     );
 
-    this.em.persist(session);
+  const refreshTokenHash =
+    await argon2.hash(refreshToken);
 
-    await this.em.flush();
+  const expiresAt = new Date();
 
-    const accessToken =
-      await this.jwtService.signAsync({
-        sub: driver.id,
-        phone: driver.phone,
-        sid: session.id,
-      });
+  expiresAt.setDate(
+    expiresAt.getDate() + 30,
+  );
 
-    return {
-      accessToken,
-      refreshToken,
-      sessionId,
-    };
-  }
+  const session = this.em.create(
+    DriverSession,
+    {
+      id: sessionId,
+      driver,
+      refreshTokenHash,
+      expiresAt,
+      revokedAt: null,
+      createdAt: new Date(),
+    },
+  );
+
+  this.em.persist(session);
+
+  await this.em.flush();
+
+  const accessToken =
+    await this.jwtService.signAsync({
+      sub: driver.id,
+      phone: driver.phone,
+      sid: session.id,
+    });
+
+  return {
+    accessToken,
+    refreshToken,
+    sessionId,
+  };
+}
 
   private async findValidAction(
     secret: string,

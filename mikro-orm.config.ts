@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { defineConfig } from '@mikro-orm/postgresql';
+import { TsMorphMetadataProvider } from '@mikro-orm/reflection';
 
 export default defineConfig({
   host: process.env.DB_HOST,
@@ -15,4 +16,6 @@ export default defineConfig({
     path: './dist/database/migrations',
     pathTs: './src/database/migrations',
   },
+
+  metadataProvider: TsMorphMetadataProvider
 });
