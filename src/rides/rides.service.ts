@@ -1,7 +1,8 @@
 import {BadRequestException,Injectable,InternalServerErrorException,} from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-import {Ride,RideStatus,} from '../database/entities/ride.entity';
+import { Ride } from '../database/entities/ride.entity';
+import { RideStatus } from '../shared/types/ride-status.enum';
 import { CreateRideDto } from './dto/create-ride.dto';
 
 @Injectable()

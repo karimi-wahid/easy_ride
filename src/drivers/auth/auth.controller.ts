@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Logger,
   Post,
   Req,
   UseGuards,
@@ -10,13 +9,14 @@ import {
 
 import { AuthService } from './auth.service';
 
-import { RefreshTokenDto } from '../../drivers/auth/dto/refresh-token.dto';
-import { RegisterDto } from '../../drivers/auth/dto/register.dto';
-import { VerifyRegistrationDto } from '../../drivers/auth/dto/verify-registration.dto';
-import { LoginDto } from '../../drivers/auth/dto/login.dto';
-import { VerifyLoginDto } from '../../drivers/auth/dto/verify-login.dto';
-import { VerifyTwoFactorDto } from '../../drivers/auth/dto/verify-2fa.dto';
-import { VerifyTwoFactorSetupDto } from '../../drivers/auth/dto/verify-2fa-setup.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { RegisterDto } from './dto/register.dto';
+import { VerifyRegistrationDto } from './dto/verify-registration.dto';
+import { LoginDto } from './dto/login.dto';
+import { VerifyLoginDto } from './dto/verify-login.dto';
+import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
+import { VerifyTwoFactorSetupDto } from './dto/verify-2fa-setup.dto';
+
 import { DriverJwtAuthGuard } from 'src/shared/guards/driver-jwt-auth.guard';
 
 @Controller('auth/driver')
@@ -56,8 +56,8 @@ export class AuthController {
   @UseGuards(DriverJwtAuthGuard)
   me(@Req() req: any) {
     return this.authService.getMe(
-      req.driver.id,
-      req.driver.sessionId,
+      req.user.id,
+      req.user.sessionId,
     );
   }
 
@@ -65,8 +65,8 @@ export class AuthController {
   @UseGuards(DriverJwtAuthGuard)
   logout(@Req() req: any) {
     return this.authService.logout(
-      req.driver.id,
-      req.driver.sessionId,
+      req.user.id,
+      req.user.sessionId,
     );
   }
 

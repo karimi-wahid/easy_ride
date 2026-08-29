@@ -6,15 +6,7 @@ import {
 } from '@mikro-orm/decorators/legacy';
 
 import { randomUUID } from 'crypto';
-
-export enum RideStatus {
-  SEARCHING = 'searching',
-  ACCEPTED = 'accepted',
-  DRIVER_ARRIVING = 'driver_arriving',
-  IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
-  CANCELLED = 'cancelled',
-}
+import { RideStatus } from '../../shared/types/ride-status.enum';
 
 @Entity({
   tableName: 'rides',
@@ -25,14 +17,12 @@ export class Ride {
   })
   id: string = randomUUID();
 
-  // User who requested the ride
   @Property({
     fieldName: 'user_id',
     type: 'uuid',
   })
   userId!: string;
 
-  // Driver who accepted the ride
   @Property({
     fieldName: 'driver_id',
     type: 'uuid',
@@ -40,7 +30,6 @@ export class Ride {
   })
   driverId: string | null = null;
 
-  // Pickup location
   @Property({
     fieldName: 'pickup_lat',
     type: 'number',
@@ -53,7 +42,6 @@ export class Ride {
   })
   pickupLng!: number;
 
-  // Destination location
   @Property({
     fieldName: 'destination_lat',
     type: 'number',
@@ -66,7 +54,6 @@ export class Ride {
   })
   destinationLng!: number;
 
-  // Estimated distance in kilometers
   @Property({
     fieldName: 'estimated_distance_km',
     type: 'number',
@@ -74,7 +61,6 @@ export class Ride {
   })
   estimatedDistanceKm: number | null = null;
 
-  // Estimated trip duration in minutes
   @Property({
     fieldName: 'estimated_duration_minutes',
     type: 'number',
@@ -82,7 +68,6 @@ export class Ride {
   })
   estimatedDurationMinutes: number | null = null;
 
-  // Estimated fare
   @Property({
     fieldName: 'estimated_fare',
     type: 'number',
@@ -90,21 +75,18 @@ export class Ride {
   })
   estimatedFare: number | null = null;
 
-  // Current ride status
   @Enum({
     items: () => RideStatus,
     fieldName: 'status',
   })
   status: RideStatus = RideStatus.SEARCHING;
 
-  // Created timestamp
   @Property({
     fieldName: 'created_at',
     type: 'datetime',
   })
   createdAt: Date = new Date();
 
-  // Updated timestamp
   @Property({
     fieldName: 'updated_at',
     type: 'datetime',

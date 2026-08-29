@@ -1,8 +1,7 @@
 import {
   Entity,
   PrimaryKey,
-  Property,
-} from '@mikro-orm/decorators/legacy';
+  Property,} from '@mikro-orm/decorators/legacy'
 import { randomUUID } from 'crypto';
 
 @Entity({ tableName: 'drivers' })
