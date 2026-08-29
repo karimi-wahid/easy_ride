@@ -1,106 +1,49 @@
-import { BadRequestException, Injectable,NotFoundException,} from '@nestjs/common';
-import {EntityManager,EntityRepository,} from '@mikro-orm/postgresql';
-import { InjectRepository } from '@mikro-orm/nestjs';
-import { randomUUID } from 'crypto';
+import { Injectable } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { User } from '../../database/entities/user.entity';
-import { UserSecurityAction } from '../../database/entities/user-security-action.entity';
 import { UpdateProfileDto } from './dto/update-profiel.dto';
 import { VerifyPhoneChangeDto } from './dto/verify-phone-change.dto';
 import { OtpService } from '../../shared/otp.service';
 import { OtpPurpose } from '../../shared/types/otp-purpose.enum';
+import { ProfileHelperService } from '../../shared/profile-helper.service';
 
 @Injectable()
 export class ProfileService {
   constructor(
     private readonly em: EntityManager,
-    @InjectRepository(User)
-    private readonly userRepository: EntityRepository<User>,
     private readonly otpService: OtpService,
+    private readonly profileHelper: ProfileHelperService,
   ) {}
 
   async getProfile(userId: string): Promise<User> {
-    const user = await this.userRepository.findOne({
-      id: userId,
-      deletedAt: null,
-    });
-    if (!user) {
-      throw new NotFoundException(
-        'User not found',
-      );
-    }
-    return user;
+    return this.profileHelper.findUser(userId);
   }
 
   async updateProfile(
     userId: string,
     dto: UpdateProfileDto,
-  ): Promise<{
-    user: User;
-    phoneVerificationRequired: boolean;
-  }> {
-    const user = await this.userRepository.findOne({
-      id: userId,
-      deletedAt: null,
-    });
+  ) {
+    const user = await this.profileHelper.findUser(userId);
+    const data = this.profileHelper.prepareUpdate(
+      dto,
+      user.phone,
+    );
 
-    if (!user) {
-      throw new NotFoundException(
-        'User not found',
+    data.updateFullname && (user.fullname = data.fullname!);
+    if (data.changePhone) {
+      await this.profileHelper.createPhoneChangeAction(
+        user,
+        data.phone!,
       );
-    }
-
-    let phoneVerificationRequired = false;
-    if (dto.fullname !== undefined) {
-      user.fullname = dto.fullname;
-    }
-    if (
-      dto.phone !== undefined &&
-      dto.phone !== user.phone
-    ) {
-      const existingUser =
-        await this.userRepository.findOne({
-          phone: dto.phone,
-          deletedAt: null,
-        });
-
-      if (
-        existingUser &&
-        existingUser.id !== user.id
-      ) {
-        throw new BadRequestException(
-          'Phone number is already in use',
-        );
-      }
-
-      const action = this.em.create(
-        UserSecurityAction,
-        {
-          user,
-          usedAt: null,
-          expiresAt: this.getExpiration(5),
-          secret: randomUUID(),
-          eventType: 'PHONE_CHANGE',
-          ipAddress: null,
-          userAgent: null,
-          metadata: JSON.stringify({
-            phone: dto.phone,
-          }),
-          createdAt: new Date(),
-        },
-      );
-
-      this.em.persist(action);
       await this.otpService.sendOtp(
-        dto.phone,
+        data.phone!,
         OtpPurpose.PHONE_CHANGE,
       );
-      phoneVerificationRequired = true;
     }
-
     await this.em.flush();
     return {
       user,
-      phoneVerificationRequired,
+      phoneVerificationRequired: data.changePhone,
     };
   }
 
@@ -108,78 +51,30 @@ export class ProfileService {
     userId: string,
     dto: VerifyPhoneChangeDto,
   ): Promise<User> {
-    const user = await this.userRepository.findOne({
-      id: userId,
-      deletedAt: null,
-    });
-    if (!user) {
-      throw new NotFoundException(
-        'User not found',
-      );
-    }
-    const actions = await this.em.find(
-      UserSecurityAction,
-      {
+    const user = await this.profileHelper.findUser(userId);
+    const action =
+      await this.profileHelper.findPhoneChangeAction(
         user,
-        eventType: 'PHONE_CHANGE',
-        usedAt: null,
-      },
-      {
-        orderBy: {
-          createdAt: 'DESC',
-        },
-      },
-    );
-
-    const action = actions.find((item) => {
-      if (item.expiresAt <= new Date()) {
-        return false;
-      }
-      const metadata = JSON.parse(
-        item.metadata ?? '{}',
-      ) as {
-        phone?: string;
-      };
-      return metadata.phone === dto.phone;
-    });
-
-    if (!action) {
-      throw new BadRequestException(
-        'Invalid or expired phone change request',
+        dto.phone,
       );
-    }
+
     await this.otpService.verifyOtp(
       dto.phone,
       OtpPurpose.PHONE_CHANGE,
       dto.code,
     );
 
-    const existingUser =
-      await this.userRepository.findOne({
-        phone: dto.phone,
-        deletedAt: null,
-      });
+    await this.profileHelper.ensurePhoneAvailable(
+      dto.phone,
+      user.id,
+    );
+    Object.assign(user, {
+      phone: dto.phone,
+      phoneVerifiedAt: new Date(),
+    });
 
-    if (
-      existingUser &&
-      existingUser.id !== user.id
-    ) {
-      throw new BadRequestException(
-        'Phone number is already in use',
-      );
-    }
-    user.phone = dto.phone;
-    user.phoneVerifiedAt = new Date();
     action.usedAt = new Date();
     await this.em.flush();
     return user;
-  }
-
-  private getExpiration(minutes: number): Date {
-    const date = new Date();
-    date.setMinutes(
-      date.getMinutes() + minutes,
-    );
-    return date;
   }
 }

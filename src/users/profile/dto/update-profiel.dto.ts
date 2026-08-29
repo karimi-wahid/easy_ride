@@ -7,8 +7,12 @@ export class UpdateProfileDto {
   fullname?: string;
 
   @IsOptional()
+  @IsString()
   @IsPhoneNumber('AF')
   @Transform(({ value }) => {
+    if (typeof value !== 'string') {
+      return value;
+    }
     const normalized = value.replace(/\s+/g, '');
     if (normalized.startsWith('0')) {
       return `+93${normalized.substring(1)}`;
