@@ -8,7 +8,7 @@ import { AttachmentModule } from './attachment/attachment.module';
 import { DriversModule } from './drivers/drivers.module';
 import { DriverAuthModule } from './drivers/auth/auth.module';
 import mikroOrmConfig from '../mikro-orm.config';
-import { RidesModule } from './rides/redes.module';
+import { RidesModule } from './rides/rides.module';
 
 @Module({
   imports: [
