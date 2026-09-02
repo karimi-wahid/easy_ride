@@ -1,30 +1,16 @@
-import {
-  Body,
-  Controller,
-  Param,
-  Post,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
-
+import {Body,Controller, Get,Param, Post,Req,UseGuards,} from '@nestjs/common';
 import { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
-
 import { RidesService } from './rides.service';
-import { RideRequestService } from './ride-request.service';
-
 import { CreateRideDto } from './dto/create-ride.dto';
 import { AuthUser } from '../shared/interface/auth-user.interface';
 
-type AuthenticatedRequest = Request & {
-  user: AuthUser;
-};
+type AuthenticatedRequest = Request & {user: AuthUser;};
 
 @Controller('rides')
 export class RidesController {
   constructor(
     private readonly ridesService: RidesService,
-    private readonly rideRequestService: RideRequestService,
   ) {}
 
   @Post()
@@ -39,26 +25,20 @@ export class RidesController {
     );
   }
 
-  @Post(':requestId/accept')
-  @UseGuards(AuthGuard('jwt'))
-  async acceptRide(
-    @Req() req: AuthenticatedRequest,
-    @Param('requestId') requestId: string,
-  ) {
-    return this.rideRequestService.acceptRequest(
-      requestId,
-      req.user.id,
-    );
+  @Get('available')
+  @UseGuards(AuthGuard('driver-jwt'))
+  async getAvailableRides() {
+    return this.ridesService.getAvailableRides();
   }
 
-  @Post(':requestId/reject')
-  @UseGuards(AuthGuard('jwt'))
-  async rejectRide(
+  @Post(':rideId/accept')
+  @UseGuards(AuthGuard('driver-jwt'))
+  async acceptRide(
     @Req() req: AuthenticatedRequest,
-    @Param('requestId') requestId: string,
+    @Param('rideId') rideId: string,
   ) {
-    return this.rideRequestService.rejectRequest(
-      requestId,
+    return this.ridesService.acceptRide(
+      rideId,
       req.user.id,
     );
   }
