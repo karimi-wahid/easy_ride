@@ -1,8 +1,6 @@
-import {
-  Entity,
-  PrimaryKey,
-  Property,} from '@mikro-orm/decorators/legacy'
+import {Entity, PrimaryKey, Property,Enum,} from '@mikro-orm/decorators/legacy';
 import { randomUUID } from 'crypto';
+import { DriverStatus } from '../../shared/types/driver-status.enum';
 
 @Entity({ tableName: 'drivers' })
 export class Driver {
@@ -28,6 +26,25 @@ export class Driver {
     fieldName: 'phone_verified_at',
   })
   phoneVerifiedAt?: Date | null;
+
+  @Enum({
+    items: () => DriverStatus,
+    fieldName: 'status',
+  })
+  status: DriverStatus = DriverStatus.OFFLINE;
+
+  @Property({
+    columnType: 'geography(Point,4326)',
+    nullable: true,
+  })
+  location: string | null = null;
+
+  @Property({
+    type: 'datetime',
+    nullable: true,
+    fieldName: 'last_location_update',
+  })
+  lastLocationUpdate: Date | null = null;
 
   @Property({
     type: 'datetime',

@@ -7,8 +7,10 @@ import { ProfileModule } from './users/profile/profile.module';
 import { AttachmentModule } from './attachment/attachment.module';
 import { DriversModule } from './drivers/drivers.module';
 import { DriverAuthModule } from './drivers/auth/auth.module';
-import mikroOrmConfig from '../mikro-orm.config';
 import { RidesModule } from './rides/rides.module';
+import { QueueModule } from './shared/queue/queue.module';
+import { MatchingModule } from './rides/matching/matching.module';
+import mikroOrmConfig from '../mikro-orm.config';
 
 @Module({
   imports: [
@@ -24,7 +26,9 @@ import { RidesModule } from './rides/rides.module';
     AttachmentModule,
     DriversModule,
     DriverAuthModule,
-    RidesModule
+    RidesModule,
+    QueueModule,
+    MatchingModule,
   ],
 })
 export class AppModule {}

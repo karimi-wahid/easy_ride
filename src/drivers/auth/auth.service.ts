@@ -1,24 +1,17 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
+import {ConflictException, Injectable,  Logger,UnauthorizedException,} from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
 import * as argon2 from 'argon2';
-import {
-  generateSecret,
-  generateURI,
-  verify,
-} from 'otplib';
+import { generateSecret, generateURI,verify,} from 'otplib';
 import { Driver } from '../../database/entities/driver.entity';
 import { DriverSession } from '../../database/entities/driver-session.entity';
 import { DriverSecurityAction } from '../../database/entities/driver-security-action.entity';
 import { DriverTwoFactor } from '../../database/entities/driver-two-factor.entity';
+import { DriverAuthSession } from 'src/database/entities/driver-auth-session.entity';
 import { OtpService } from '../../shared/otp.service';
 import { OtpPurpose } from '../../shared/types/otp-purpose.enum';
+import { DriverStatus } from '../../shared/types/driver-status.enum';
 import { RegisterDto } from '../../drivers/auth/dto/register.dto';
 import { VerifyRegistrationDto } from '../../drivers/auth/dto/verify-registration.dto';
 import { LoginDto } from '../../drivers/auth/dto/login.dto';
@@ -26,11 +19,12 @@ import { VerifyLoginDto } from '../../drivers/auth/dto/verify-login.dto';
 import { VerifyTwoFactorDto } from '../../drivers/auth/dto/verify-2fa.dto';
 import { VerifyTwoFactorSetupDto } from '../../drivers/auth/dto/verify-2fa-setup.dto';
 import { RefreshTokenDto } from '../../drivers/auth/dto/refresh-token.dto';
-import { DriverAuthSession } from 'src/database/entities/driver-auth-session.entity';
 
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
+  private readonly logger = new Logger(
+    AuthService.name,
+  );
 
   constructor(
     private readonly em: EntityManager,
@@ -39,10 +33,13 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const existingDriver = await this.em.findOne(Driver, {
-      phone: dto.phone,
-      deletedAt: null,
-    });
+    const existingDriver = await this.em.findOne(
+      Driver,
+      {
+        phone: dto.phone,
+        deletedAt: null,
+      },
+    );
 
     if (existingDriver) {
       throw new ConflictException(
@@ -50,34 +47,34 @@ export class AuthService {
       );
     }
 
-    const action = this.em.create(DriverSecurityAction, {
-      driver: null,
-      usedAt: null,
-      expiresAt: this.getExpiration(5),
-      secret: randomUUID(),
-      eventType: 'REGISTRATION',
-      ipAddress: null,
-      userAgent: null,
-      metadata: JSON.stringify({
-        fullname: dto.fullname,
-        phone: dto.phone,
-      }),
-      createdAt: new Date(),
-    });
-
+    const action = this.em.create(
+      DriverSecurityAction,
+      {
+        driver: null,
+        usedAt: null,
+        expiresAt: this.getExpiration(5),
+        secret: randomUUID(),
+        eventType: 'REGISTRATION',
+        ipAddress: null,
+        userAgent: null,
+        metadata: JSON.stringify({
+          fullname: dto.fullname,
+          phone: dto.phone,
+        }),
+        createdAt: new Date(),
+      },
+    );
     this.em.persist(action);
-
     await this.otpService.sendOtp(
       dto.phone,
       OtpPurpose.REGISTRATION,
     );
-
     await this.em.flush();
-
     this.logger.log(
       `Registration OTP sent to ${dto.phone}`,
     );
   }
+
 
   async verifyRegistration(
     dto: VerifyRegistrationDto,
@@ -94,20 +91,16 @@ export class AuthService {
         },
       },
     );
-
     const action = actions.find((item) => {
-      
       if (item.expiresAt <= new Date()) {
         return false;
       }
-
       const metadata = JSON.parse(
         item.metadata ?? '{}',
       ) as {
         fullname?: string;
         phone?: string;
       };
-
       return metadata.phone === dto.phone;
     });
 
@@ -116,7 +109,6 @@ export class AuthService {
         'Invalid or expired registration request',
       );
     }
-
     const metadata = JSON.parse(
       action.metadata ?? '{}',
     ) as {
@@ -129,86 +121,92 @@ export class AuthService {
         'Invalid registration data',
       );
     }
-
     await this.otpService.verifyOtp(
       dto.phone,
       OtpPurpose.REGISTRATION,
       dto.code,
     );
-
-    const existingDriver = await this.em.findOne(Driver, {
-      phone: dto.phone,
-      deletedAt: null,
-    });
-
+    const existingDriver = await this.em.findOne(
+      Driver,
+      {
+        phone: dto.phone,
+        deletedAt: null,
+      },
+    );
     if (existingDriver) {
       throw new ConflictException(
         'Phone number is already registered',
       );
     }
 
-    const driver = this.em.create(Driver, {
-      id: randomUUID(),
-      fullname: metadata.fullname,
-      phone: metadata.phone,
-      phoneVerifiedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    const driver = this.em.create(
+      Driver,
+      {
+        id: randomUUID(),
+        fullname: metadata.fullname,
+        phone: metadata.phone,
+        phoneVerifiedAt: new Date(),
+        status: DriverStatus.OFFLINE,
+        location: null,
+        lastLocationUpdate: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
 
     action.driver = driver;
     action.usedAt = new Date();
-
     this.em.persist(driver);
-
     await this.em.flush();
-
     this.logger.log(
       `Registration verified for ${dto.phone}`,
     );
-
     return this.createSession(driver);
   }
 
+
   async login(dto: LoginDto) {
-    const driver = await this.em.findOne(Driver, {
-      phone: dto.phone,
-      deletedAt: null,
-    });
+    const driver = await this.em.findOne(
+      Driver,
+      {
+        phone: dto.phone,
+        deletedAt: null,
+      },
+    );
 
     if (!driver) {
       throw new UnauthorizedException(
         'Invalid phone number',
       );
     }
-
     await this.otpService.sendOtp(
       driver.phone,
       OtpPurpose.LOGIN,
     );
-
     this.logger.log(
       `Login OTP sent to ${driver.phone}`,
     );
   }
 
+
   async verifyLogin(dto: VerifyLoginDto) {
-    const driver = await this.em.findOne(Driver, {
-      phone: dto.phone,
-      deletedAt: null,
-    });
+    const driver = await this.em.findOne(
+      Driver,
+      {
+        phone: dto.phone,
+        deletedAt: null,
+      },
+    );
 
     if (!driver) {
       throw new UnauthorizedException(
         'Invalid phone number',
       );
     }
-
     this.logger.debug({
-  driverId: driver.id,
-  driverPhone: driver.phone,
-});
-
+      driverId: driver.id,
+      driverPhone: driver.phone,
+    });
     await this.otpService.verifyOtp(
       driver.phone,
       OtpPurpose.LOGIN,
@@ -216,18 +214,15 @@ export class AuthService {
     );
 
     const twoFactor = await this.em.findOne(
-  DriverTwoFactor,
-  {
-    driver: driver.id,
-  },
-);
-this.logger.debug({
-  twoFactor,
-});
+      DriverTwoFactor,
+      {
+        driver: driver.id,
+      },
+    );
+    this.logger.debug({  twoFactor,});
 
     if (twoFactor?.enabled) {
       const challengeToken = randomUUID();
-
       const action = this.em.create(
         DriverSecurityAction,
         {
@@ -242,29 +237,24 @@ this.logger.debug({
           createdAt: new Date(),
         },
       );
-
       this.em.persist(action);
-
       await this.em.flush();
-
       this.logger.log(
         `2FA challenge created for user ${driver.id}`,
       );
-
       return {
         challengeToken,
       };
     }
-
     return this.createSession(driver);
   }
+
 
   async refresh(dto: RefreshTokenDto) {
     let payload: {
       sub: string;
       sid: string;
     };
-
     try {
       payload =
         await this.jwtService.verifyAsync<{
@@ -278,13 +268,12 @@ this.logger.debug({
         'Invalid or expired refresh token',
       );
     }
-
+    
     if (!payload.sub || !payload.sid) {
       throw new UnauthorizedException(
         'Invalid refresh token',
       );
     }
-
     const session = await this.em.findOne(
       DriverSession,
       {
@@ -343,21 +332,15 @@ this.logger.debug({
         },
       );
 
-    session.refreshTokenHash =
-      await argon2.hash(newRefreshToken);
-
+    session.refreshTokenHash = await argon2.hash(newRefreshToken);
     await this.em.flush();
 
-    const accessToken =
-      await this.jwtService.signAsync({
+    const accessToken = await this.jwtService.signAsync({
         sub: driver.id,
         phone: driver.phone,
         sid: session.id,
       });
-
-    this.logger.log(
-      `Session refreshed for user ${driver.id}`,
-    );
+    this.logger.log(`Session refreshed for user ${driver.id}`,);
 
     return {
       accessToken,
@@ -366,12 +349,12 @@ this.logger.debug({
     };
   }
 
+
   async logout(
     driverId: string,
     sessionId: string,
   ) {
-    const session = await this.em.findOne(
-      DriverSession,
+    const session = await this.em.findOne(DriverSession,
       {
         id: sessionId,
         revokedAt: null,
@@ -387,36 +370,23 @@ this.logger.debug({
       );
     }
 
-    if (
-      !session.driver ||
-      session.driver.id !== driverId ||
-      session.driver.deletedAt
-    ) {
+    if (!session.driver || session.driver.id !== driverId ||  session.driver.deletedAt) {
       throw new UnauthorizedException(
         'Driver session is invalid',
       );
     }
-
+    
     session.revokedAt = new Date();
-
     await this.em.flush();
-
-    this.logger.log(
-      `Session revoked for driver ${driverId}`,
-    );
-
+    this.logger.log(`Session revoked for driver ${driverId}`,);
     return {
       success: true,
     };
   }
 
-  async getMe(
-    driverId: string,
-    sessionId: string,
-  ) {
-    const session = await this.em.findOne(
-      DriverSession,
-      {
+  async getMe(driverId: string,sessionId: string,) {
+    const session = await this.em.findOne(DriverSession,
+  {
         id: sessionId,
         revokedAt: null,
       },
@@ -439,11 +409,7 @@ this.logger.debug({
 
     const driver = session.driver;
 
-    if (
-      !driver ||
-      driver.id !== driverId ||
-      driver.deletedAt
-    ) {
+    if (!driver || driver.id !== driverId ||driver.deletedAt) {
       throw new UnauthorizedException(
         'Driver session is invalid',
       );
@@ -454,22 +420,26 @@ this.logger.debug({
       fullname: driver.fullname,
       phone: driver.phone,
       phoneVerifiedAt:
-        driver.phoneVerifiedAt ?? null,
+      driver.phoneVerifiedAt ?? null,
+      status: driver.status,
       createdAt: driver.createdAt,
       updatedAt: driver.updatedAt,
       session: {
-        id: session.id,
-        expiresAt: session.expiresAt,
-        createdAt: session.createdAt,
+      id: session.id,
+      expiresAt: session.expiresAt,
+      createdAt: session.createdAt,
       },
     };
   }
 
   async enableTwoFactor(driverId: string) {
-    const driver = await this.em.findOne(Driver, {
-      id: driverId,
-      deletedAt: null,
-    });
+    const driver = await this.em.findOne(
+      Driver,
+      {
+        id: driverId,
+        deletedAt: null,
+      },
+    );
 
     if (!driver) {
       throw new UnauthorizedException(
@@ -498,7 +468,6 @@ this.logger.debug({
 
     const secret = generateSecret();
     const setupToken = randomUUID();
-
     const action = this.em.create(
       DriverSecurityAction,
       {
@@ -509,17 +478,13 @@ this.logger.debug({
         eventType: 'TWO_FACTOR_SETUP',
         ipAddress: null,
         userAgent: null,
-        metadata: JSON.stringify({
-          secret,
-        }),
+        metadata: JSON.stringify({ secret,}),
         createdAt: new Date(),
       },
     );
-
     this.em.persist(action);
-
     await this.em.flush();
-
+    
     return {
       enabled: false,
       setupToken,
@@ -562,18 +527,13 @@ this.logger.debug({
       );
     }
 
-    if (
-      !action.driver ||
-      action.driver.id !== driverId
-    ) {
+    if (!action.driver ||action.driver.id !== driverId) {
       throw new UnauthorizedException(
         'Invalid 2FA setup request',
       );
     }
 
-    const metadata = JSON.parse(
-      action.metadata ?? '{}',
-    ) as {
+    const metadata = JSON.parse( action.metadata ?? '{}',) as {
       secret?: string;
     };
 
@@ -582,22 +542,21 @@ this.logger.debug({
         'Invalid 2FA setup data',
       );
     }
-    this.logger.debug({
-  action: 'TWO_FACTOR_VERIFY',
-  driverId,
-  setupToken: dto.setupToken,
-  code: dto.code,
-  secret: metadata.secret,
-});
-    const result = await verify({
-      secret: metadata.secret,
-      token: dto.code,
-    });
 
     this.logger.debug({
-  action: 'TWO_FACTOR_RESULT',
-  result,
-});
+      action: 'TWO_FACTOR_VERIFY',
+      driverId,
+      setupToken: dto.setupToken,
+      code: dto.code,
+      secret: metadata.secret,
+    });
+
+    const result = await verify({secret: metadata.secret,token: dto.code,});
+
+    this.logger.debug({
+      action: 'TWO_FACTOR_RESULT',
+      result,
+    });
 
     if (!result.valid) {
       throw new UnauthorizedException(
@@ -627,24 +586,22 @@ this.logger.debug({
           updatedAt: new Date(),
         },
       );
-
       this.em.persist(twoFactor);
     }
-
     action.usedAt = new Date();
-
     await this.em.flush();
     this.logger.debug({
-  action: 'TWO_FACTOR_BEFORE_SAVE',
-  driverId: action.driver?.id,
-  secret: metadata.secret,
-  enabled: twoFactor.enabled,
-});
+      action: 'TWO_FACTOR_BEFORE_SAVE',
+      driverId: action.driver?.id,
+      secret: metadata.secret,
+      enabled: twoFactor.enabled,
+    });
 
     return {
       enabled: true,
     };
   }
+
 
   async verifyTwoFactor(
     dto: VerifyTwoFactorDto,
@@ -661,7 +618,6 @@ this.logger.debug({
     }
 
     const driver = action.driver;
-
     const twoFactor = await this.em.findOne(
       DriverTwoFactor,
       {
@@ -675,10 +631,7 @@ this.logger.debug({
       );
     }
 
-    const result = await verify({
-      secret: twoFactor.secret,
-      token: dto.code,
-    });
+    const result = await verify({ secret: twoFactor.secret, token: dto.code, });
 
     if (!result.valid) {
       throw new UnauthorizedException(
@@ -687,65 +640,53 @@ this.logger.debug({
     }
 
     action.usedAt = new Date();
-
     await this.em.flush();
-
     return this.createSession(driver);
   }
 
-  private async createSession(driver: Driver) {
-  const sessionId = randomUUID();
 
-  const refreshToken =
-    await this.jwtService.signAsync(
+  private async createSession(
+    driver: Driver,
+  ) {
+    const sessionId = randomUUID();
+    const refreshToken =await this.jwtService.signAsync({
+          sub: driver.id,
+          sid: sessionId,
+        },
+        {
+          secret: process.env.JWT_REFRESH_SECRET,
+          expiresIn: '30d',
+        },
+      );
+
+    const refreshTokenHash =await argon2.hash(refreshToken);
+    const expiresAt = new Date();
+    expiresAt.setDate( expiresAt.getDate() + 30,);
+    const session = this.em.create(
+      DriverSession,
       {
-        sub: driver.id,
-        sid: sessionId,
-      },
-      {
-        secret: process.env.JWT_REFRESH_SECRET,
-        expiresIn: '30d',
+        id: sessionId,
+        driver,
+        refreshTokenHash,
+        expiresAt,
+        revokedAt: null,
+        createdAt: new Date(),
       },
     );
+    this.em.persist(session);
+    await this.em.flush();
+    const accessToken = await this.jwtService.signAsync({
+        sub: driver.id,
+        phone: driver.phone,
+        sid: session.id,
+      });
 
-  const refreshTokenHash =
-    await argon2.hash(refreshToken);
-
-  const expiresAt = new Date();
-
-  expiresAt.setDate(
-    expiresAt.getDate() + 30,
-  );
-
-  const session = this.em.create(
-    DriverSession,
-    {
-      id: sessionId,
-      driver,
-      refreshTokenHash,
-      expiresAt,
-      revokedAt: null,
-      createdAt: new Date(),
-    },
-  );
-
-  this.em.persist(session);
-
-  await this.em.flush();
-
-  const accessToken =
-    await this.jwtService.signAsync({
-      sub: driver.id,
-      phone: driver.phone,
-      sid: session.id,
-    });
-
-  return {
-    accessToken,
-    refreshToken,
-    sessionId,
-  };
-}
+    return {
+      accessToken,
+      refreshToken,
+      sessionId,
+    };
+  }
 
   private async findValidAction(
     secret: string,
@@ -774,17 +715,12 @@ this.logger.debug({
         'Authentication request has expired',
       );
     }
-
     return action;
   }
 
   private getExpiration(minutes: number) {
     const date = new Date();
-
-    date.setMinutes(
-      date.getMinutes() + minutes,
-    );
-
+    date.setMinutes( date.getMinutes() + minutes,);
     return date;
   }
 }

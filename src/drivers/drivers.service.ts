@@ -13,9 +13,11 @@ import { DriverSecurityAction } from '../database/entities/driver-security-actio
 
 import { UpdateDriverProfileDto } from './profile/dto/updateDriverProfileDto';
 import { VerifyPhoneChangeDto } from './profile/dto/VerifyPhoneChangeDto';
+import { UpdateDriverLocationDto } from './dto/update-driver-location.dto';
 
 import { OtpService } from 'src/shared/otp.service';
 import { OtpPurpose } from 'src/shared/types/otp-purpose.enum';
+import { DriverStatus } from 'src/shared/types/driver-status.enum';
 
 @Injectable()
 export class DriversService {
@@ -54,6 +56,9 @@ export class DriversService {
       phone,
       createdAt: new Date(),
       updatedAt: new Date(),
+      status: DriverStatus.OFFLINE,
+      location: null,
+      lastLocationUpdate: null,
     });
 
     this.em.persist(driver);
@@ -64,7 +69,6 @@ export class DriversService {
   }
 
   async getMe(driverId: string) {
-    this.logger.log(driverId)
     const driver = await this.em.findOne(Driver, {
       id: driverId,
       deletedAt: null,
@@ -82,6 +86,7 @@ export class DriversService {
       phone: driver.phone,
       phoneVerifiedAt:
         driver.phoneVerifiedAt ?? null,
+      status: driver.status,
       createdAt: driver.createdAt,
       updatedAt: driver.updatedAt,
     };
@@ -104,9 +109,7 @@ export class DriversService {
 
     const allowedFields: (
       keyof UpdateDriverProfileDto
-    )[] = [
-      'fullname',
-    ];
+    )[] = ['fullname'];
 
     for (const field of allowedFields) {
       if (dto[field] !== undefined) {
@@ -181,7 +184,6 @@ export class DriversService {
     );
 
     this.em.persist(action);
-
 
     await this.otpService.sendOtp(
       phone,
@@ -293,6 +295,82 @@ export class DriversService {
       phoneVerifiedAt: driver.phoneVerifiedAt,
     };
   }
+
+  async updateLocation(
+    driverId: string,
+    dto: UpdateDriverLocationDto,
+  ): Promise<void> {
+    const driver = await this.em.findOne(
+      Driver,
+      {
+        id: driverId,
+        deletedAt: null,
+      },
+    );
+
+    if (!driver) {
+      throw new UnauthorizedException(
+        'Driver not found',
+      );
+    }
+
+    await this.em.getConnection().execute(
+      `
+      UPDATE drivers
+      SET
+        location = ST_SetSRID(
+          ST_MakePoint(?, ?),
+          4326
+        )::geography,
+
+        last_location_update = NOW(),
+        updated_at = NOW()
+
+      WHERE id = ?
+      `,
+      [
+        dto.lng,
+        dto.lat,
+        driverId,
+      ],
+    );
+  }
+async updateStatus(
+  driverId: string,
+  status: DriverStatus,
+): Promise<Driver> {
+  const driver = await this.em.findOne(
+    Driver,
+    {
+      id: driverId,
+      deletedAt: null,
+    },
+  );
+
+  if (!driver) {
+    throw new UnauthorizedException(
+      'Driver not found',
+    );
+  }
+
+  if (!status) {
+    throw new ConflictException(
+      'Driver status is required',
+    );
+  }
+
+  driver.status = status;
+  driver.updatedAt = new Date();
+
+  await this.em.flush();
+
+  this.logger.log(
+    `Driver ${driver.id} status changed to ${driver.status}`,
+  );
+
+  return driver;
+}
+
 
   private getExpiration(minutes: number): Date {
     const date = new Date();

@@ -13,9 +13,11 @@ import { DriversService } from './drivers.service';
 import { UpdateDriverProfileDto } from './profile/dto/updateDriverProfileDto';
 import { RequestPhoneOtpDto } from './profile/dto/RequestPhoneOtpDto';
 import { VerifyPhoneChangeDto } from './profile/dto/VerifyPhoneChangeDto';
+import { UpdateDriverLocationDto } from './dto/update-driver-location.dto';
 
 import type { AuthenticatedRequest } from 'src/shared/types/authenticated-request';
 import { DriverJwtAuthGuard } from 'src/shared/guards/driver-jwt-auth.guard';
+import { DriverStatus } from 'src/shared/types/driver-status.enum';
 
 @Controller('drivers')
 export class DriversController {
@@ -66,6 +68,35 @@ export class DriversController {
     return this.driverService.verifyPhoneChange(
       req.user.id,
       dto,
+    );
+  }
+
+  @Patch('location')
+  @UseGuards(DriverJwtAuthGuard)
+  async updateLocation(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UpdateDriverLocationDto,
+  ) {
+    await this.driverService.updateLocation(
+      req.user.id,
+      dto,
+    );
+
+    return {
+      success: true,
+      message: 'Driver location updated',
+    };
+  }
+
+  @Patch('status')
+  @UseGuards(DriverJwtAuthGuard)
+  async updateStatus(
+    @Req() req: AuthenticatedRequest,
+    @Body('status') status: DriverStatus,
+  ) {
+    return this.driverService.updateStatus(
+      req.user.id,
+      status,
     );
   }
 }
