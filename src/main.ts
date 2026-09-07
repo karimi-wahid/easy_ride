@@ -10,6 +10,11 @@ async function bootstrap() {
     credentials: true,
   });
 
+    app.enableCors({
+    origin: '*',
+  });
+
+  
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
