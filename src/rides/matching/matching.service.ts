@@ -7,18 +7,15 @@ import { RideStatus } from '../../shared/types/ride-status.enum';
 
 @Injectable()
 export class MatchingService {
+ 
   constructor(
-    private readonly em: EntityManager,
+     private readonly em: EntityManager,
   ) {}
 
-  async findNearbyDrivers(
-    rideId: string,
-    radiusMeters = 3000,
-  ): Promise<Driver[]> {
+  async findNearbyDrivers(  rideId: string, radiusMeters = 3000,): Promise<Driver[]> {
    
     const em = this.em.fork();
-    const ride = await em.findOne( Ride,
-      {
+    const ride = await em.findOne( Ride, {
         id: rideId,
         status: RideStatus.SEARCHING,
         driverId: null,
@@ -31,9 +28,9 @@ export class MatchingService {
       );
     }
 
-    const drivers =
-      await em.getConnection().execute<
-        Array<{
+    
+    const drivers = await em.getConnection().execute<
+      Array<{
           id: string;
         }>
       >(
@@ -83,9 +80,7 @@ export class MatchingService {
       return [];
     }
 
-    const driverIds = drivers.map(
-      (driver) => driver.id,
-    );
+    const driverIds = drivers.map( (driver) => driver.id, );
 
     return em.find(
       Driver,

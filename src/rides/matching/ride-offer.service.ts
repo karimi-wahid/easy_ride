@@ -12,10 +12,7 @@ export class RideOfferService {
     private readonly em: EntityManager,
   ) {}
 
-  async createOffers(
-    rideId: string,
-    drivers: Driver[],
-    expirationSeconds = 15,
+  async createOffers( rideId: string, drivers: Driver[], expirationSeconds = 15,
   ): Promise<RideOffer[]> {
 
     const em = this.em.fork();
@@ -106,26 +103,17 @@ export class RideOfferService {
     }
 
     const em = this.em.fork();
-    const managedOffer =await em.findOne(  RideOffer,
-        {
-          id: offer.id,
-        },
-      );
+    const managedOffer =await em.findOne(RideOffer,{id: offer.id, },);
 
     if (!managedOffer) {
       return;
     }
 
-    if (
-      managedOffer.status !==
-      OfferStatus.PENDING
-    ) {
+    if (managedOffer.status !==OfferStatus.PENDING) {
       return;
     }
 
-    managedOffer.status =
-      OfferStatus.EXPIRED;
-
+    managedOffer.status =OfferStatus.EXPIRED;
     await em.flush();
   }
 }

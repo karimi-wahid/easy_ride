@@ -11,13 +11,19 @@ export const REALTIME_EVENTS = {
   RIDE_STATE_CHANGED: 'ride:state_changed',
 
 
-  DRIVER_ARRIVED: 'ride:driver_arrived',
-  RIDE_STARTED: 'ride:started',
-  RIDE_COMPLETED: 'ride:completed',
-  RIDE_CANCELLED: 'ride:cancelled',
+  DRIVER_ARRIVED:'ride:driver_arrived',
+  RIDE_STARTED:'ride:started',
+  RIDE_COMPLETED:'ride:completed',
+  RIDE_CANCELLED:'ride:cancelled',
 
-  
   DRIVER_LOCATION: 'driver:location',
+
+
+  JOIN_RIDE: 'ride:join',
+  LEAVE_RIDE: 'ride:leave',
+  ACCEPT_RIDE: 'ride:accept',
+  REJECT_RIDE: 'ride:reject',
+  DRIVER_LOCATION_UPDATE: 'driver:location_update',
 } as const;
 
 export const REALTIME_ROOMS = {

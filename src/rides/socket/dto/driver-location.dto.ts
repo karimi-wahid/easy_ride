@@ -11,7 +11,6 @@ export class DriverLocationDto {
   @IsLongitude()
   longitude!: number;
 
-
   @IsNotEmpty()
   @IsNumber()
   timestamp!: number;
