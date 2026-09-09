@@ -4,7 +4,7 @@ import { RIDE_MATCHING_QUEUE,RideMatchingQueue,} from './ride-matching.queue';
 import { MatchingService } from './matching.service';
 import { MatchingWorker } from './matching.worker';
 import { RideOfferService } from './ride-offer.service';
-import { RealtimeModule } from '../socket/socket.module';
+import { RealtimeModule } from '../../socket/socket.module';
 
 @Module({
   imports: [

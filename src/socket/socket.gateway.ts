@@ -7,7 +7,7 @@ import { RejectRideDto } from './dto/reject-ride.dto';
 import { JoinRideDto } from './dto/join-ride.dto';
 import { LeaveRideDto } from './dto/leave-ride.dto';
 import { DriverLocationDto } from './dto/driver-location.dto';
-import { RidesService } from '../rides.service';
+import { RidesService } from '../rides/rides.service';
 import { SocketAuthMiddleware,} from './socket-auth.middleware';
 
 type SocketIdentity = {type: 'driver' | 'user';id: string;};

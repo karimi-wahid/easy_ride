@@ -4,7 +4,7 @@ import { Job } from 'bullmq';
 import { RIDE_MATCHING_QUEUE,RIDE_MATCHING_JOB,} from './ride-matching.queue';
 import { MatchingService } from './matching.service';
 import { RideOfferService } from './ride-offer.service';
-import { RealtimeService } from '../socket/socket.service';
+import { RealtimeService } from '../../socket/socket.service';
 
 @Processor(RIDE_MATCHING_QUEUE)
 @Injectable()

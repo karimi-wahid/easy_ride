@@ -3,8 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
 import { Socket } from 'socket.io';
-import { DriverSession } from '../../database/entities/driver-session.entity';
-import { Driver } from '../../database/entities/driver.entity';
+import { DriverSession } from '../database/entities/driver-session.entity';
+import { Driver } from '../database/entities/driver.entity';
 
 @Injectable()
 export class SocketAuthMiddleware {

@@ -9,7 +9,7 @@ import { DriversModule } from './drivers/drivers.module';
 import { DriverAuthModule } from './drivers/auth/auth.module';
 import { RidesModule } from './rides/rides.module';
 import { QueueModule } from './shared/queue/queue.module';
-import { MatchingModule } from './rides/matching/matching.module';
+import { MatchingModule } from './shared/matching/matching.module';
 import mikroOrmConfig from '../mikro-orm.config';
 
 @Module({

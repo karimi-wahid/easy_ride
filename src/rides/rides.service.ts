@@ -7,8 +7,8 @@ import { RideStatus } from '../shared/types/ride-status.enum';
 import { DriverStatus } from '../shared/types/driver-status.enum';
 import { OfferStatus } from '../shared/types/offer-status.enum';
 import { CreateRideDto } from './dto/create-ride.dto';
-import { AcceptRideDto } from './socket/dto/accept-ride.dto';
-import { RideMatchingQueue } from './matching/ride-matching.queue';
+import { AcceptRideDto } from '../socket/dto/accept-ride.dto';
+import { RideMatchingQueue } from '../shared/matching/ride-matching.queue';
 
 
 @Injectable()

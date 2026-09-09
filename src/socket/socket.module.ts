@@ -3,7 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { RealtimeGateway } from './socket.gateway';
 import { RealtimeService } from './socket.service';
 import { SocketAuthMiddleware } from './socket-auth.middleware';
-import { RidesModule } from '../rides.module';
+import { RidesModule } from '../rides/rides.module';
 
 @Module({
   imports: [
