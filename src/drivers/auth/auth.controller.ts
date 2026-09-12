@@ -90,10 +90,14 @@ export class AuthController {
     );
   }
 
+
   @Post('2fa/verify')
   verifyTwoFactor(
     @Body() dto: VerifyTwoFactorDto,
   ) {
     return this.authService.verifyTwoFactor(dto);
   }
+
+
 }
+ 

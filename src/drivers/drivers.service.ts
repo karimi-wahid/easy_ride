@@ -201,6 +201,7 @@ export class DriversService {
     };
   }
 
+
   async verifyPhoneChange(
     driverId: string,
     dto: VerifyPhoneChangeDto,
@@ -296,45 +297,33 @@ export class DriversService {
     };
   }
 
-  async updateLocation(
-    driverId: string,
-    dto: UpdateDriverLocationDto,
-  ): Promise<void> {
-    const driver = await this.em.findOne(
-      Driver,
-      {
-        id: driverId,
-        deletedAt: null,
-      },
-    );
+  
+async updateLocation(
+  driverId: string,
+  dto: UpdateDriverLocationDto,
+): Promise<void> {
+  await this.em.getConnection().execute(
+    `
+    UPDATE drivers
+    SET
+      location = ST_SetSRID(
+        ST_MakePoint(?, ?),
+        4326
+      )::geography,
+      last_location_update = NOW(),
+      updated_at = NOW()
+    WHERE id = ?
+      AND deleted_at IS NULL
+    `,
+    [
+      dto.lng,
+      dto.lat,
+      driverId,
+    ],
+  );
+}
 
-    if (!driver) {
-      throw new UnauthorizedException(
-        'Driver not found',
-      );
-    }
 
-    await this.em.getConnection().execute(
-      `
-      UPDATE drivers
-      SET
-        location = ST_SetSRID(
-          ST_MakePoint(?, ?),
-          4326
-        )::geography,
-
-        last_location_update = NOW(),
-        updated_at = NOW()
-
-      WHERE id = ?
-      `,
-      [
-        dto.lng,
-        dto.lat,
-        driverId,
-      ],
-    );
-  }
 async updateStatus(
   driverId: string,
   status: DriverStatus,

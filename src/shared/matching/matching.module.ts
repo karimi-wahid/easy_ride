@@ -5,6 +5,7 @@ import { MatchingService } from './matching.service';
 import { MatchingWorker } from './matching.worker';
 import { RideOfferService } from './ride-offer.service';
 import { RealtimeModule } from '../../socket/socket.module';
+import { RoutingModule } from 'src/routing/routing.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { RealtimeModule } from '../../socket/socket.module';
       name: RIDE_MATCHING_QUEUE,
     }),
     RealtimeModule,
+    RoutingModule,
   ],
 
   providers: [

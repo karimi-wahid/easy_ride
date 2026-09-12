@@ -1,16 +1,6 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
-
+import { Body,Controller,Get,Post,Req,UseGuards,} from '@nestjs/common';
 import { AuthService } from './auth.service';
-
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
-
 import { RefreshTokenDto } from '../../users/auth/dto/refresh-token.dto';
 import { RegisterDto } from '../../users/auth/dto/register.dto';
 import { VerifyRegistrationDto } from '../../users/auth/dto/verify-registration.dto';
@@ -18,6 +8,7 @@ import { LoginDto } from '../../users/auth/dto/login.dto';
 import { VerifyLoginDto } from '../../users/auth/dto/verify-login.dto';
 import { VerifyTwoFactorDto } from '../../users/auth/dto/verify-2fa.dto';
 import { VerifyTwoFactorSetupDto } from '../../users/auth/dto/verify-2fa-setup.dto';
+
 
 @Controller('auth')
 export class AuthController {

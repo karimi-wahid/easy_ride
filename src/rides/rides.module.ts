@@ -1,10 +1,11 @@
-import {forwardRef, Module,} from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { RidesController } from './rides.controller';
 import { RidesService } from './rides.service';
 import { Ride } from '../database/entities/ride.entity';
 import { MatchingModule } from '../shared/matching/matching.module';
 import { RealtimeModule } from '../socket/socket.module';
+import { RoutingModule } from '../routing/routing.module';
 
 @Module({
   imports: [
@@ -13,9 +14,12 @@ import { RealtimeModule } from '../socket/socket.module';
     ]),
 
     MatchingModule,
+
     forwardRef(() =>
       RealtimeModule,
     ),
+
+    RoutingModule,
   ],
 
   controllers: [

@@ -29,6 +29,7 @@ import { DriverJwtAuthGuard } from 'src/shared/guards/driver-jwt-auth.guard';
   ],
 
   exports: [
+    DriversService,
     OtpService,
   ],
 })

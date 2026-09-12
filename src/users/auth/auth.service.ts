@@ -1,18 +1,9 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
+import {ConflictException,Injectable,Logger,UnauthorizedException,} from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
 import * as argon2 from 'argon2';
-import {
-  generateSecret,
-  generateURI,
-  verify,
-} from 'otplib';
+import { generateSecret,generateURI,verify,} from 'otplib';
 import { User } from '../../database/entities/user.entity';
 import { UserSession } from '../../database/entities/user-session.entity';
 import { UserSecurityAction } from '../../database/entities/user-security-action.entity';
@@ -26,6 +17,7 @@ import { VerifyLoginDto } from '../../users/auth/dto/verify-login.dto';
 import { VerifyTwoFactorDto } from '../../users/auth/dto/verify-2fa.dto';
 import { VerifyTwoFactorSetupDto } from '../../users/auth/dto/verify-2fa-setup.dto';
 import { RefreshTokenDto } from '../../users/auth/dto/refresh-token.dto';
+
 
 @Injectable()
 export class AuthService {
@@ -58,8 +50,8 @@ export class AuthService {
       ipAddress: null,
       userAgent: null,
       metadata: JSON.stringify({
-        fullname: dto.fullname,
-        phone: dto.phone,
+      fullname: dto.fullname,
+      phone: dto.phone,
       }),
       createdAt: new Date(),
     });
@@ -72,11 +64,9 @@ export class AuthService {
     );
 
     await this.em.flush();
-
-    this.logger.log(
-      `Registration OTP sent to ${dto.phone}`,
-    );
+    this.logger.log( `Registration OTP sent to ${dto.phone}`, );
   }
+
 
   async verifyRegistration(
     dto: VerifyRegistrationDto,
@@ -100,16 +90,10 @@ export class AuthService {
         return false;
       }
 
-      const metadata = JSON.parse(
-        item.metadata ?? '{}',
-      ) as {
-        fullname?: string;
-        phone?: string;
-      };
+      const metadata = JSON.parse( item.metadata ?? '{}', ) as { fullname?: string;phone?: string; };
+
       this.logger.log(metadata.phone == dto.phone)
-
       this.logger.log(metadata.phone , dto.phone)
-
       return metadata.phone === dto.phone;
     });
 
@@ -158,19 +142,15 @@ export class AuthService {
       updatedAt: new Date(),
     });
 
+
     action.user = user;
     action.usedAt = new Date();
-
     this.em.persist(user);
-
     await this.em.flush();
-
-    this.logger.log(
-      `Registration verified for ${dto.phone}`,
-    );
-
+    this.logger.log( `Registration verified for ${dto.phone}`,);
     return this.createSession(user);
   }
+
 
   async login(dto: LoginDto) {
     const user = await this.em.findOne(User, {
@@ -189,9 +169,7 @@ export class AuthService {
       OtpPurpose.LOGIN,
     );
 
-    this.logger.log(
-      `Login OTP sent to ${user.phone}`,
-    );
+    this.logger.log(  `Login OTP sent to ${user.phone}`,);
   }
 
   async verifyLogin(dto: VerifyLoginDto) {
@@ -237,21 +215,17 @@ export class AuthService {
         },
       );
 
+
       this.em.persist(action);
-
       await this.em.flush();
-
-      this.logger.log(
-        `2FA challenge created for user ${user.id}`,
-      );
-
+      this.logger.log( `2FA challenge created for user ${user.id}`, );
       return {
         challengeToken,
       };
     }
-
     return this.createSession(user);
   }
+
 
   async refresh(dto: RefreshTokenDto) {
     let payload: {
@@ -337,9 +311,7 @@ export class AuthService {
         },
       );
 
-    session.refreshTokenHash =
-      await argon2.hash(newRefreshToken);
-
+    session.refreshTokenHash = await argon2.hash(newRefreshToken);
     await this.em.flush();
 
     const accessToken =
@@ -349,9 +321,7 @@ export class AuthService {
         sid: session.id,
       });
 
-    this.logger.log(
-      `Session refreshed for user ${user.id}`,
-    );
+    this.logger.log(   `Session refreshed for user ${user.id}`, );
 
     return {
       accessToken,
@@ -359,6 +329,7 @@ export class AuthService {
       sessionId: session.id,
     };
   }
+
 
   async logout(
     userId: string,
@@ -381,28 +352,20 @@ export class AuthService {
       );
     }
 
-    if (
-      !session.user ||
-      session.user.id !== userId ||
-      session.user.deletedAt
-    ) {
+    if (!session.user ||session.user.id !== userId || session.user.deletedAt) {
       throw new UnauthorizedException(
         'User session is invalid',
       );
     }
 
     session.revokedAt = new Date();
-
     await this.em.flush();
-
-    this.logger.log(
-      `Session revoked for user ${userId}`,
-    );
-
+    this.logger.log(   `Session revoked for user ${userId}`, );
     return {
       success: true,
     };
   }
+
 
   async getMe(
     userId: string,
@@ -432,12 +395,7 @@ export class AuthService {
     }
 
     const user = session.user;
-
-    if (
-      !user ||
-      user.id !== userId ||
-      user.deletedAt
-    ) {
+    if (!user ||user.id !== userId ||user.deletedAt) {
       throw new UnauthorizedException(
         'User session is invalid',
       );
@@ -448,7 +406,7 @@ export class AuthService {
       fullname: user.fullname,
       phone: user.phone,
       phoneVerifiedAt:
-        user.phoneVerifiedAt ?? null,
+      user.phoneVerifiedAt ?? null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       session: {
@@ -458,6 +416,8 @@ export class AuthService {
       },
     };
   }
+
+
 
   async enableTwoFactor(userId: string) {
     const user = await this.em.findOne(User, {
@@ -471,8 +431,7 @@ export class AuthService {
       );
     }
 
-    const existingTwoFactor =
-      await this.em.findOne(
+    const existingTwoFactor = await this.em.findOne(
         UserTwoFactor,
         { user },
       );
@@ -492,7 +451,6 @@ export class AuthService {
 
     const secret = generateSecret();
     const setupToken = randomUUID();
-
     const action = this.em.create(
       UserSecurityAction,
       {
@@ -511,7 +469,6 @@ export class AuthService {
     );
 
     this.em.persist(action);
-
     await this.em.flush();
 
     return {
@@ -526,6 +483,7 @@ export class AuthService {
       }),
     };
   }
+
 
   async verifyTwoFactorSetup(
     userId: string,
@@ -615,13 +573,12 @@ export class AuthService {
     }
 
     action.usedAt = new Date();
-
     await this.em.flush();
-
     return {
       enabled: true,
     };
   }
+
 
   async verifyTwoFactor(
     dto: VerifyTwoFactorDto,
@@ -664,17 +621,14 @@ export class AuthService {
     }
 
     action.usedAt = new Date();
-
     await this.em.flush();
-
     return this.createSession(user);
   }
 
   private async createSession(user: User) {
     const sessionId = randomUUID();
 
-    const refreshToken =
-      await this.jwtService.signAsync(
+    const refreshToken = await this.jwtService.signAsync(
         {
           sub: user.id,
           sid: sessionId,
@@ -685,14 +639,9 @@ export class AuthService {
         },
       );
 
-    const refreshTokenHash =
-      await argon2.hash(refreshToken);
-
+    const refreshTokenHash = await argon2.hash(refreshToken);
     const expiresAt = new Date();
-
-    expiresAt.setDate(
-      expiresAt.getDate() + 30,
-    );
+    expiresAt.setDate( expiresAt.getDate() + 30, );
 
     const session = this.em.create(
       UserSession,
@@ -709,22 +658,19 @@ export class AuthService {
     );
 
     this.em.persist(session);
-
     await this.em.flush();
-
-    const accessToken =
-      await this.jwtService.signAsync({
+    const accessToken = await this.jwtService.signAsync({
         sub: user.id,
         phone: user.phone,
         sid: session.id,
       });
-
     return {
       accessToken,
       refreshToken,
       sessionId,
     };
   }
+  
 
   private async findValidAction(
     secret: string,

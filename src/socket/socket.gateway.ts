@@ -1,16 +1,27 @@
-import {ConnectedSocket, MessageBody,OnGatewayConnection, OnGatewayDisconnect, SubscribeMessage,WebSocketGateway, WebSocketServer,WsException,} from '@nestjs/websockets';
-import { Logger, ValidationPipe,} from '@nestjs/common';
+import { ConnectedSocket,MessageBody, OnGatewayConnection, OnGatewayDisconnect,SubscribeMessage,WebSocketGateway,WebSocketServer,WsException,} from '@nestjs/websockets';
+import {Logger, ValidationPipe,} from '@nestjs/common';
 import { Namespace, Socket,} from 'socket.io';
 import { RealtimeService } from './socket.service';
-import {REALTIME_EVENTS,} from './socket.constants';
+import { REALTIME_EVENTS,} from './socket.constants';
 import { RejectRideDto } from './dto/reject-ride.dto';
 import { JoinRideDto } from './dto/join-ride.dto';
 import { LeaveRideDto } from './dto/leave-ride.dto';
 import { DriverLocationDto } from './dto/driver-location.dto';
 import { RidesService } from '../rides/rides.service';
-import { SocketAuthMiddleware,} from './socket-auth.middleware';
+import { DriversService } from '../drivers/drivers.service';
+import { SocketAuthMiddleware } from './socket-auth.middleware';
+import { RideStatus } from '../shared/types/ride-status.enum';
 
-type SocketIdentity = {type: 'driver' | 'user';id: string;};
+type SocketIdentity =
+  | {
+      type: 'driver';
+      id: string;
+    }
+  | {
+      type: 'user';
+      id: string;
+    };
+
 
 @WebSocketGateway({
   namespace: '/rides',
@@ -21,11 +32,12 @@ type SocketIdentity = {type: 'driver' | 'user';id: string;};
 })
 
 export class RealtimeGateway
-implements
+  implements
     OnGatewayConnection,
     OnGatewayDisconnect
 {
-  private readonly logger =  new Logger(RealtimeGateway.name);
+  private readonly logger = new Logger(RealtimeGateway.name);
+
   @WebSocketServer()
   server!: Namespace;
 
@@ -33,12 +45,14 @@ implements
     private readonly realtimeService: RealtimeService,
     private readonly ridesService: RidesService,
     private readonly socketAuthMiddleware: SocketAuthMiddleware,
+    private readonly driversService: DriversService,
   ) {}
-
 
   afterInit(server: Namespace): void {
     this.server = server;
+
     this.realtimeService.setServer(server);
+
     server.use(
       (
         client: Socket,
@@ -50,15 +64,25 @@ implements
         );
       },
     );
-    this.logger.log('Ride realtime gateway initialized | namespace=/rides',);
+
+    this.logger.log(
+      'Ride realtime gateway initialized | namespace=/rides',
+    );
   }
 
-
-
-  handleConnection( client: Socket,
+  handleConnection(
+    client: Socket,
   ): void {
-    const identity = client.data.identity as | SocketIdentity | undefined;
-    if (!identity) { this.logger.warn(  `UNAUTHENTICATED SOCKET | socket=${client.id}`,);
+    const identity =
+      client.data.identity as
+        | SocketIdentity
+        | undefined;
+
+    if (!identity) {
+      this.logger.warn(
+        `UNAUTHENTICATED SOCKET | socket=${client.id}`,
+      );
+
       client.disconnect(true);
       return;
     }
@@ -70,11 +94,16 @@ implements
           identity.id,
         )
         .catch((error) => {
-          this.logger.error( `Failed to join driver room | driverId=${identity.id} | error=${this.getErrorMessage(error)}`, );
+          this.logger.error(
+            `Failed to join driver room | driverId=${identity.id} | error=${this.getErrorMessage(error)}`,
+          );
+
           client.disconnect(true);
         });
 
-      this.logger.log( `DRIVER CONNECTED | socket=${client.id} | driverId=${identity.id} | room=driver:${identity.id}`,);
+      this.logger.log(
+        `DRIVER CONNECTED | socket=${client.id} | driverId=${identity.id} | room=driver:${identity.id}`,
+      );
     }
 
     if (identity.type === 'user') {
@@ -84,31 +113,37 @@ implements
           identity.id,
         )
         .catch((error) => {
-          this.logger.error( `Failed to join user room | userId=${identity.id} | error=${this.getErrorMessage(error)}`);
+          this.logger.error(
+            `Failed to join user room | userId=${identity.id} | error=${this.getErrorMessage(error)}`,
+          );
+
           client.disconnect(true);
         });
-      this.logger.log(  `USER CONNECTED | socket=${client.id} | userId=${identity.id} | room=user:${identity.id}`,
+
+      this.logger.log(
+        `USER CONNECTED | socket=${client.id} | userId=${identity.id} | room=user:${identity.id}`,
       );
     }
-    this.logger.log(`SOCKET CONNECTED | socket=${client.id} | type=${identity.type} | id=${identity.id}`,
+
+    this.logger.log(
+      `SOCKET CONNECTED | socket=${client.id} | type=${identity.type} | id=${identity.id}`,
     );
   }
-
-
 
   handleDisconnect(
     client: Socket,
   ): void {
-    this.logger.log(  `SOCKET DISCONNECTED | socket=${client.id}`,);
+    this.logger.log(
+      `SOCKET DISCONNECTED | socket=${client.id}`,
+    );
   }
-
-
 
   @SubscribeMessage(
     REALTIME_EVENTS.JOIN_RIDE,
   )
   async joinRide(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket()
+    client: Socket,
     @MessageBody(
       new ValidationPipe({
         transform: true,
@@ -117,9 +152,19 @@ implements
     dto: JoinRideDto,
   ) {
     try {
-      const identity =this.getIdentity(client);
-      const ride =await this.ridesService.getRideForRealtime(  dto.rideId,);
-      const allowed =identity.type === 'driver'  ? ride.driverId === identity.id  : ride.userId === identity.id;
+      const identity =
+        this.getIdentity(client);
+
+      const ride =
+        await this.ridesService.getRideForRealtime(
+          dto.rideId,
+        );
+
+      const allowed =
+        identity.type === 'driver'
+          ? ride.driverId === identity.id
+          : ride.userId === identity.id;
+
       if (!allowed) {
         throw new WsException(
           'You are not part of this ride',
@@ -131,7 +176,10 @@ implements
         dto.rideId,
       );
 
-      this.logger.log(`RIDE ROOM JOINED | socket=${client.id} | rideId=${dto.rideId} | type=${identity.type} | id=${identity.id}`,  );
+      this.logger.log(
+        `RIDE ROOM JOINED | socket=${client.id} | rideId=${dto.rideId} | type=${identity.type} | id=${identity.id}`,
+      );
+
       return {
         success: true,
         rideId: dto.rideId,
@@ -141,13 +189,12 @@ implements
     }
   }
 
-
-
   @SubscribeMessage(
     REALTIME_EVENTS.LEAVE_RIDE,
   )
   async leaveRide(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket()
+    client: Socket,
     @MessageBody(
       new ValidationPipe({
         transform: true,
@@ -156,9 +203,19 @@ implements
     dto: LeaveRideDto,
   ) {
     try {
-      const identity =this.getIdentity(client);
-      const ride =  await this.ridesService.getRideForRealtime(dto.rideId, );
-      const allowed =identity.type === 'driver'  ? ride.driverId === identity.id  : ride.userId === identity.id;
+      const identity =
+        this.getIdentity(client);
+
+      const ride =
+        await this.ridesService.getRideForRealtime(
+          dto.rideId,
+        );
+
+      const allowed =
+        identity.type === 'driver'
+          ? ride.driverId === identity.id
+          : ride.userId === identity.id;
+
       if (!allowed) {
         throw new WsException(
           'You are not part of this ride',
@@ -169,7 +226,11 @@ implements
         client,
         dto.rideId,
       );
-      this.logger.log( `RIDE ROOM LEFT | socket=${client.id} | rideId=${dto.rideId} | type=${identity.type} | id=${identity.id}`,);
+
+      this.logger.log(
+        `RIDE ROOM LEFT | socket=${client.id} | rideId=${dto.rideId} | type=${identity.type} | id=${identity.id}`,
+      );
+
       return {
         success: true,
         rideId: dto.rideId,
@@ -179,13 +240,12 @@ implements
     }
   }
 
-
-
   @SubscribeMessage(
     REALTIME_EVENTS.REJECT_RIDE,
   )
   async rejectRide(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket()
+    client: Socket,
     @MessageBody(
       new ValidationPipe({
         transform: true,
@@ -194,18 +254,26 @@ implements
     dto: RejectRideDto,
   ) {
     try {
-      const identity = this.getIdentity(client);
+      const identity =
+        this.getIdentity(client);
+
       if (identity.type !== 'driver') {
         throw new WsException(
           'Only drivers can reject rides',
         );
       }
-      const offer = await this.ridesService.rejectOffer(
+
+      const offer =
+        await this.ridesService.rejectOffer(
           dto.rideId,
           dto.offerId,
           identity.id,
         );
-      this.logger.log(`RIDE OFFER REJECTED | driverId=${identity.id} | rideId=${dto.rideId} | offerId=${dto.offerId}`,);
+
+      this.logger.log(
+        `RIDE OFFER REJECTED | driverId=${identity.id} | rideId=${dto.rideId} | offerId=${dto.offerId}`,
+      );
+
       return {
         success: true,
         offerId: offer.id,
@@ -217,14 +285,12 @@ implements
     }
   }
 
-
-
-
   @SubscribeMessage(
     REALTIME_EVENTS.DRIVER_LOCATION_UPDATE,
   )
   async driverLocation(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket()
+    client: Socket,
     @MessageBody(
       new ValidationPipe({
         transform: true,
@@ -233,13 +299,17 @@ implements
     dto: DriverLocationDto,
   ) {
     try {
-      const identity =this.getIdentity(client);
+      const identity =
+        this.getIdentity(client);
+
       if (identity.type !== 'driver') {
         throw new WsException(
           'Only drivers can send location',
         );
       }
-      const ride =await this.ridesService.getRideForRealtime(
+
+      const ride =
+        await this.ridesService.getRideForRealtime(
           dto.rideId,
         );
 
@@ -249,11 +319,25 @@ implements
         );
       }
 
-      if (ride.status !== 'accepted' && ride.status !== 'driver_arriving' &&ride.status !== 'in_progress' ) {
+      if (
+        ride.status !== RideStatus.ACCEPTED &&
+        ride.status !==
+          RideStatus.DRIVER_ARRIVING &&
+        ride.status !==
+          RideStatus.IN_PROGRESS
+      ) {
         throw new WsException(
           'Ride is not active',
         );
       }
+
+      await this.driversService.updateLocation(
+        identity.id,
+        {
+          lat: dto.latitude,
+          lng: dto.longitude,
+        },
+      );
 
       this.realtimeService.notifyDriverLocation(
         dto.rideId,
@@ -262,8 +346,12 @@ implements
           driverId: identity.id,
           latitude: dto.latitude,
           longitude: dto.longitude,
-          timestamp: dto.timestamp,
+          timestamp: Date.now(),
         },
+      );
+
+      this.logger.debug(
+        `DRIVER LOCATION UPDATED | driverId=${identity.id} | rideId=${dto.rideId} | lat=${dto.latitude} | lng=${dto.longitude}`,
       );
 
       return {
@@ -273,8 +361,6 @@ implements
       throw this.toWsException(error);
     }
   }
-
-
 
   private getIdentity(
     client: Socket,
@@ -290,7 +376,10 @@ implements
       );
     }
 
-    if (  identity.type !== 'driver' &&  identity.type !== 'user' ) {
+    if (
+      identity.type !== 'driver' &&
+      identity.type !== 'user'
+    ) {
       throw new WsException(
         'Invalid socket identity',
       );
@@ -301,14 +390,14 @@ implements
         'Socket identity is missing id',
       );
     }
+
     return identity;
   }
 
-
-  
-  private toWsException( error: unknown,
+  private toWsException(
+    error: unknown,
   ): WsException {
-    if (   error instanceof WsException ) {
+    if (error instanceof WsException) {
       return error;
     }
 
@@ -323,13 +412,13 @@ implements
     );
   }
 
-
   private getErrorMessage(
     error: unknown,
   ): string {
     if (error instanceof Error) {
       return error.message;
     }
+
     return String(error);
   }
 }

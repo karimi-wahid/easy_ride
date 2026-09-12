@@ -1,11 +1,7 @@
-import {
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
-
+import {Injectable,Logger,UnauthorizedException,} from '@nestjs/common';
 import { OtpApiService } from './HttpService.service';
 import { OtpPurpose } from './types/otp-purpose.enum';
+
 
 interface StoredOtp {
   phone: string;
@@ -17,35 +13,19 @@ interface StoredOtp {
 
 @Injectable()
 export class OtpService {
-  private readonly logger = new Logger(
-    OtpService.name,
-  );
-
+  private readonly logger = new Logger( OtpService.name,);
   private readonly otps: StoredOtp[] = [];
 
   constructor(
     private readonly otpApiService: OtpApiService,
-  ) {
-    this.logger.warn('OtpService INSTANCE CREATED');
-  }
+  ) {this.logger.warn('OtpService INSTANCE CREATED');}
 
-  async sendOtp(
-  phone: string,
-  purpose: OtpPurpose,
-): Promise<void> {
+
+  async sendOtp(phone: string, purpose: OtpPurpose,): Promise<void> {
   const code = this.generateOtp();
+  const expiresAt = new Date(  Date.now() + 5 * 60 * 1000,);
 
-  const expiresAt = new Date(
-    Date.now() + 5 * 60 * 1000,
-  );
-
-  this.otps.unshift({
-    phone,
-    purpose,
-    code,
-    expiresAt,
-    verified: false,
-  });
+  this.otps.unshift({ phone, purpose, code, expiresAt, verified: false,});
 
   this.logger.debug({
     action: 'OTP_STORED',
@@ -95,9 +75,7 @@ export class OtpService {
 
     otp.verified = true;
 
-    this.logger.log(
-      `OTP verified for ${purpose}`,
-    );
+    this.logger.log(  `OTP verified for ${purpose}`, );
   }
 
   private generateOtp(): string {
