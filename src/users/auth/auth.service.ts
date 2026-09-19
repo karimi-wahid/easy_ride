@@ -29,6 +29,7 @@ export class AuthService {
     private readonly otpService: OtpService,
   ) {}
 
+
   async register(dto: RegisterDto) {
     const existingUser = await this.em.findOne(User, {
       phone: dto.phone,
@@ -40,7 +41,6 @@ export class AuthService {
         'Phone number is already registered',
       );
     }
-
     const action = this.em.create(UserSecurityAction, {
       user: null,
       usedAt: null,
@@ -49,30 +49,22 @@ export class AuthService {
       eventType: 'REGISTRATION',
       ipAddress: null,
       userAgent: null,
-      metadata: JSON.stringify({
-      fullname: dto.fullname,
-      phone: dto.phone,
-      }),
+      metadata: JSON.stringify({fullname: dto.fullname,phone: dto.phone,}),
       createdAt: new Date(),
     });
 
     this.em.persist(action);
-
     await this.otpService.sendOtp(
       dto.phone,
       OtpPurpose.REGISTRATION,
     );
-
     await this.em.flush();
     this.logger.log( `Registration OTP sent to ${dto.phone}`, );
   }
 
 
-  async verifyRegistration(
-    dto: VerifyRegistrationDto,
-  ) {
-    const actions = await this.em.find(
-      UserSecurityAction,
+  async verifyRegistration( dto: VerifyRegistrationDto,) {
+    const actions = await this.em.find(UserSecurityAction,
       {
         eventType: 'REGISTRATION',
         usedAt: null,
@@ -85,43 +77,31 @@ export class AuthService {
     );
 
     const action = actions.find((item) => {
-      
       if (item.expiresAt <= new Date()) {
         return false;
       }
-
       const metadata = JSON.parse( item.metadata ?? '{}', ) as { fullname?: string;phone?: string; };
-
       this.logger.log(metadata.phone == dto.phone)
       this.logger.log(metadata.phone , dto.phone)
       return metadata.phone === dto.phone;
     });
-
     if (!action) {
       throw new UnauthorizedException(
         'Invalid or expired registration request',
       );
     }
 
-    const metadata = JSON.parse(
-      action.metadata ?? '{}',
-    ) as {
+    const metadata = JSON.parse(action.metadata ?? '{}', ) as {
       fullname?: string;
       phone?: string;
     };
-
     if (!metadata.fullname || !metadata.phone) {
       throw new UnauthorizedException(
         'Invalid registration data',
       );
     }
 
-    await this.otpService.verifyOtp(
-      dto.phone,
-      OtpPurpose.REGISTRATION,
-      dto.code,
-    );
-
+    await this.otpService.verifyOtp(dto.phone,OtpPurpose.REGISTRATION,dto.code, );
     const existingUser = await this.em.findOne(User, {
       phone: dto.phone,
       deletedAt: null,
@@ -141,8 +121,6 @@ export class AuthService {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-
-
     action.user = user;
     action.usedAt = new Date();
     this.em.persist(user);
@@ -150,6 +128,7 @@ export class AuthService {
     this.logger.log( `Registration verified for ${dto.phone}`,);
     return this.createSession(user);
   }
+
 
 
   async login(dto: LoginDto) {
@@ -200,7 +179,6 @@ export class AuthService {
 
     if (twoFactor?.enabled) {
       const challengeToken = randomUUID();
-
       const action = this.em.create(
         UserSecurityAction,
         {
@@ -235,8 +213,7 @@ export class AuthService {
     };
 
     try {
-      payload =
-        await this.jwtService.verifyAsync<{
+      payload =await this.jwtService.verifyAsync<{
           sub: string;
           sid: string;
         }>(dto.refreshToken, {
@@ -254,8 +231,7 @@ export class AuthService {
       );
     }
 
-    const session = await this.em.findOne(
-      UserSession,
+    const session = await this.em.findOne( UserSession,
       {
         id: payload.sid,
         revokedAt: null,
@@ -279,11 +255,7 @@ export class AuthService {
 
     const user = session.user;
 
-    if (
-      !user ||
-      user.id !== payload.sub ||
-      user.deletedAt
-    ) {
+    if ( !user || user.id !== payload.sub ||user.deletedAt) {
       throw new UnauthorizedException(
         'User session is invalid',
       );
@@ -313,9 +285,7 @@ export class AuthService {
 
     session.refreshTokenHash = await argon2.hash(newRefreshToken);
     await this.em.flush();
-
-    const accessToken =
-      await this.jwtService.signAsync({
+    const accessToken =await this.jwtService.signAsync({
         sub: user.id,
         phone: user.phone,
         sid: session.id,
@@ -365,7 +335,7 @@ export class AuthService {
       success: true,
     };
   }
-
+0
 
   async getMe(
     userId: string,
@@ -625,9 +595,9 @@ export class AuthService {
     return this.createSession(user);
   }
 
+
   private async createSession(user: User) {
     const sessionId = randomUUID();
-
     const refreshToken = await this.jwtService.signAsync(
         {
           sub: user.id,

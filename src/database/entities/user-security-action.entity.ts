@@ -1,11 +1,6 @@
-import {
-  Entity,
-  PrimaryKey,
-  Property,
-  ManyToOne,
-} from '@mikro-orm/decorators/legacy';
-
+import {Entity, PrimaryKey, Property,ManyToOne,} from '@mikro-orm/decorators/legacy';
 import { User } from './user.entity';
+
 
 @Entity({ tableName: 'user_security_action' })
 export class UserSecurityAction {

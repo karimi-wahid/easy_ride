@@ -74,7 +74,6 @@ export class OtpService {
     }
 
     otp.verified = true;
-
     this.logger.log(  `OTP verified for ${purpose}`, );
   }
 

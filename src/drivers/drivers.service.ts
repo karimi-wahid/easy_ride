@@ -1,20 +1,11 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
-
+import {ConflictException,Injectable,Logger, UnauthorizedException,} from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { randomUUID } from 'crypto';
-
 import { Driver } from '../database/entities/driver.entity';
 import { DriverSecurityAction } from '../database/entities/driver-security-action.entity';
-
 import { UpdateDriverProfileDto } from './profile/dto/updateDriverProfileDto';
 import { VerifyPhoneChangeDto } from './profile/dto/VerifyPhoneChangeDto';
 import { UpdateDriverLocationDto } from './dto/update-driver-location.dto';
-
 import { OtpService } from 'src/shared/otp.service';
 import { OtpPurpose } from 'src/shared/types/otp-purpose.enum';
 import { DriverStatus } from 'src/shared/types/driver-status.enum';
