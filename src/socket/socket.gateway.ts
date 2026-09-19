@@ -1,16 +1,43 @@
-import { ConnectedSocket,MessageBody, OnGatewayConnection, OnGatewayDisconnect,SubscribeMessage,WebSocketGateway,WebSocketServer,WsException,} from '@nestjs/websockets';
-import {Logger, ValidationPipe,} from '@nestjs/common';
-import { Namespace, Socket,} from 'socket.io';
+import {
+  ConnectedSocket,
+  MessageBody,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer,
+  WsException,
+} from '@nestjs/websockets';
+
+import {
+  Logger,
+  ValidationPipe,
+} from '@nestjs/common';
+
+import {
+  Namespace,
+  Socket,
+} from 'socket.io';
+
 import { RealtimeService } from './socket.service';
-import { REALTIME_EVENTS,} from './socket.constants';
+
+import {
+  REALTIME_EVENTS,
+} from './socket.constants';
+
+import { AcceptRideDto } from './dto/accept-ride.dto';
 import { RejectRideDto } from './dto/reject-ride.dto';
 import { JoinRideDto } from './dto/join-ride.dto';
 import { LeaveRideDto } from './dto/leave-ride.dto';
 import { DriverLocationDto } from './dto/driver-location.dto';
+
 import { RidesService } from '../rides/rides.service';
 import { DriversService } from '../drivers/drivers.service';
 import { SocketAuthMiddleware } from './socket-auth.middleware';
-import { RideStatus } from '../shared/types/ride-status.enum';
+
+import {
+  RideStatus,
+} from '../shared/types/ride-status.enum';
 
 type SocketIdentity =
   | {
@@ -22,21 +49,30 @@ type SocketIdentity =
       id: string;
     };
 
+type RideRealtimeStatus =
+  | 'SEARCHING'
+  | 'DRIVER_ASSIGNED'
+  | 'DRIVER_ARRIVING'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED';
 
 @WebSocketGateway({
   namespace: '/rides',
+
   cors: {
     origin: '*',
     credentials: true,
   },
 })
-
 export class RealtimeGateway
   implements
     OnGatewayConnection,
     OnGatewayDisconnect
 {
-  private readonly logger = new Logger(RealtimeGateway.name);
+  private readonly logger = new Logger(
+    RealtimeGateway.name,
+  );
 
   @WebSocketServer()
   server!: Namespace;
@@ -48,10 +84,17 @@ export class RealtimeGateway
     private readonly driversService: DriversService,
   ) {}
 
+  /**
+   * =====================================================
+   * SOCKET INITIALIZATION
+   * =====================================================
+   */
   afterInit(server: Namespace): void {
     this.server = server;
 
-    this.realtimeService.setServer(server);
+    this.realtimeService.setServer(
+      server,
+    );
 
     server.use(
       (
@@ -70,6 +113,11 @@ export class RealtimeGateway
     );
   }
 
+  /**
+   * =====================================================
+   * SOCKET CONNECTION
+   * =====================================================
+   */
   handleConnection(
     client: Socket,
   ): void {
@@ -95,14 +143,18 @@ export class RealtimeGateway
         )
         .catch((error) => {
           this.logger.error(
-            `Failed to join driver room | driverId=${identity.id} | error=${this.getErrorMessage(error)}`,
+            `FAILED TO JOIN DRIVER ROOM | ` +
+              `driverId=${identity.id} | ` +
+              `error=${this.getErrorMessage(error)}`,
           );
 
           client.disconnect(true);
         });
 
       this.logger.log(
-        `DRIVER CONNECTED | socket=${client.id} | driverId=${identity.id} | room=driver:${identity.id}`,
+        `DRIVER CONNECTED | ` +
+          `socket=${client.id} | ` +
+          `driverId=${identity.id}`,
       );
     }
 
@@ -114,39 +166,177 @@ export class RealtimeGateway
         )
         .catch((error) => {
           this.logger.error(
-            `Failed to join user room | userId=${identity.id} | error=${this.getErrorMessage(error)}`,
+            `FAILED TO JOIN USER ROOM | ` +
+              `userId=${identity.id} | ` +
+              `error=${this.getErrorMessage(error)}`,
           );
 
           client.disconnect(true);
         });
 
       this.logger.log(
-        `USER CONNECTED | socket=${client.id} | userId=${identity.id} | room=user:${identity.id}`,
+        `USER CONNECTED | ` +
+          `socket=${client.id} | ` +
+          `userId=${identity.id}`,
       );
     }
 
     this.logger.log(
-      `SOCKET CONNECTED | socket=${client.id} | type=${identity.type} | id=${identity.id}`,
+      `SOCKET CONNECTED | ` +
+        `socket=${client.id} | ` +
+        `type=${identity.type} | ` +
+        `id=${identity.id}`,
     );
   }
 
+  /**
+   * =====================================================
+   * SOCKET DISCONNECT
+   * =====================================================
+   */
   handleDisconnect(
     client: Socket,
   ): void {
     this.logger.log(
-      `SOCKET DISCONNECTED | socket=${client.id}`,
+      `SOCKET DISCONNECTED | ` +
+        `socket=${client.id}`,
     );
   }
 
+  /**
+   * =====================================================
+   * ACCEPT RIDE OFFER
+   * =====================================================
+   */
+  @SubscribeMessage(
+    REALTIME_EVENTS.ACCEPT_RIDE,
+  )
+  async acceptRide(
+    @ConnectedSocket()
+    client: Socket,
+
+    @MessageBody(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+      }),
+    )
+    dto: AcceptRideDto,
+  ) {
+    try {
+      const identity =
+        this.getIdentity(client);
+
+      if (identity.type !== 'driver') {
+        throw new WsException(
+          'Only drivers can accept rides',
+        );
+      }
+
+      const result =
+        await this.ridesService.acceptRideOffer(
+          identity.id,
+          dto,
+        );
+
+      const ride = result.ride;
+
+      const acceptedAt =
+        new Date().toISOString();
+
+      const acceptedPayload = {
+        rideId: ride.id,
+
+        driver: {
+          id: identity.id,
+        },
+
+        acceptedAt,
+      };
+
+      /**
+       * Notify rider.
+       */
+      this.realtimeService.notifyRideAccepted(
+        ride.userId,
+        acceptedPayload,
+      );
+
+      /**
+       * Notify ride room that a driver
+       * has been assigned.
+       */
+      this.realtimeService.notifyRideDriverAssigned(
+        ride.id,
+        acceptedPayload,
+      );
+
+      /**
+       * Notify ride state change.
+       *
+       * Database:
+       *
+       * SEARCHING -> ACCEPTED
+       *
+       * Realtime:
+       *
+       * SEARCHING -> DRIVER_ASSIGNED
+       */
+      this.realtimeService.notifyRideStateChanged(
+        ride.id,
+        {
+          rideId: ride.id,
+
+          previousStatus:
+            this.toRealtimeStatus(
+              result.previousStatus,
+            ),
+
+          status: 'DRIVER_ASSIGNED',
+
+          changedAt: acceptedAt,
+        },
+      );
+
+      this.logger.log(
+        `RIDE ACCEPTED | ` +
+          `driverId=${identity.id} | ` +
+          `rideId=${ride.id} | ` +
+          `offerId=${result.offer.id}`,
+      );
+
+      return {
+        success: true,
+
+        rideId: ride.id,
+
+        offerId: result.offer.id,
+
+        status: ride.status,
+
+        route: result.route,
+      };
+    } catch (error) {
+      throw this.toWsException(error);
+    }
+  }
+
+  /**
+   * =====================================================
+   * JOIN RIDE
+   * =====================================================
+   */
   @SubscribeMessage(
     REALTIME_EVENTS.JOIN_RIDE,
   )
   async joinRide(
     @ConnectedSocket()
     client: Socket,
+
     @MessageBody(
       new ValidationPipe({
         transform: true,
+        whitelist: true,
       }),
     )
     dto: JoinRideDto,
@@ -177,27 +367,41 @@ export class RealtimeGateway
       );
 
       this.logger.log(
-        `RIDE ROOM JOINED | socket=${client.id} | rideId=${dto.rideId} | type=${identity.type} | id=${identity.id}`,
+        `RIDE ROOM JOINED | ` +
+          `socket=${client.id} | ` +
+          `rideId=${dto.rideId} | ` +
+          `type=${identity.type} | ` +
+          `id=${identity.id}`,
       );
 
       return {
         success: true,
+
         rideId: dto.rideId,
+
+        room: `ride:${dto.rideId}`,
       };
     } catch (error) {
       throw this.toWsException(error);
     }
   }
 
+  /**
+   * =====================================================
+   * LEAVE RIDE
+   * =====================================================
+   */
   @SubscribeMessage(
     REALTIME_EVENTS.LEAVE_RIDE,
   )
   async leaveRide(
     @ConnectedSocket()
     client: Socket,
+
     @MessageBody(
       new ValidationPipe({
         transform: true,
+        whitelist: true,
       }),
     )
     dto: LeaveRideDto,
@@ -228,11 +432,16 @@ export class RealtimeGateway
       );
 
       this.logger.log(
-        `RIDE ROOM LEFT | socket=${client.id} | rideId=${dto.rideId} | type=${identity.type} | id=${identity.id}`,
+        `RIDE ROOM LEFT | ` +
+          `socket=${client.id} | ` +
+          `rideId=${dto.rideId} | ` +
+          `type=${identity.type} | ` +
+          `id=${identity.id}`,
       );
 
       return {
         success: true,
+
         rideId: dto.rideId,
       };
     } catch (error) {
@@ -240,15 +449,22 @@ export class RealtimeGateway
     }
   }
 
+  /**
+   * =====================================================
+   * REJECT RIDE OFFER
+   * =====================================================
+   */
   @SubscribeMessage(
     REALTIME_EVENTS.REJECT_RIDE,
   )
   async rejectRide(
     @ConnectedSocket()
     client: Socket,
+
     @MessageBody(
       new ValidationPipe({
         transform: true,
+        whitelist: true,
       }),
     )
     dto: RejectRideDto,
@@ -263,6 +479,17 @@ export class RealtimeGateway
         );
       }
 
+      /**
+       * Load ride so we know the rider.
+       */
+      const ride =
+        await this.ridesService.getRideForRealtime(
+          dto.rideId,
+        );
+
+      /**
+       * Reject only this driver's offer.
+       */
       const offer =
         await this.ridesService.rejectOffer(
           dto.rideId,
@@ -270,14 +497,44 @@ export class RealtimeGateway
           identity.id,
         );
 
+      /**
+       * Notify rider.
+       */
+      this.realtimeService.notifyRideRejected(
+        ride.userId,
+        {
+          rideId: dto.rideId,
+          offerId: dto.offerId,
+          driverId: identity.id,
+          reason: dto.reason,
+        },
+      );
+
+      /**
+       * Notify driver.
+       */
+      this.realtimeService.notifyOfferCancelled(
+        identity.id,
+        {
+          offerId: dto.offerId,
+          rideId: dto.rideId,
+        },
+      );
+
       this.logger.log(
-        `RIDE OFFER REJECTED | driverId=${identity.id} | rideId=${dto.rideId} | offerId=${dto.offerId}`,
+        `RIDE OFFER REJECTED | ` +
+          `driverId=${identity.id} | ` +
+          `rideId=${dto.rideId} | ` +
+          `offerId=${dto.offerId}`,
       );
 
       return {
         success: true,
+
         offerId: offer.id,
+
         rideId: dto.rideId,
+
         status: offer.status,
       };
     } catch (error) {
@@ -285,15 +542,22 @@ export class RealtimeGateway
     }
   }
 
+  /**
+   * =====================================================
+   * DRIVER LOCATION UPDATE
+   * =====================================================
+   */
   @SubscribeMessage(
     REALTIME_EVENTS.DRIVER_LOCATION_UPDATE,
   )
   async driverLocation(
     @ConnectedSocket()
     client: Socket,
+
     @MessageBody(
       new ValidationPipe({
         transform: true,
+        whitelist: true,
       }),
     )
     dto: DriverLocationDto,
@@ -313,14 +577,21 @@ export class RealtimeGateway
           dto.rideId,
         );
 
-      if (ride.driverId !== identity.id) {
+      if (
+        ride.driverId !== identity.id
+      ) {
         throw new WsException(
           'Driver is not assigned to this ride',
         );
       }
 
+      /**
+       * Driver location is accepted only
+       * while the ride is active.
+       */
       if (
-        ride.status !== RideStatus.ACCEPTED &&
+        ride.status !==
+          RideStatus.ACCEPTED &&
         ride.status !==
           RideStatus.DRIVER_ARRIVING &&
         ride.status !==
@@ -331,6 +602,9 @@ export class RealtimeGateway
         );
       }
 
+      /**
+       * Persist latest driver location.
+       */
       await this.driversService.updateLocation(
         identity.id,
         {
@@ -339,29 +613,49 @@ export class RealtimeGateway
         },
       );
 
+      /**
+       * Broadcast location to ride room.
+       */
       this.realtimeService.notifyDriverLocation(
         dto.rideId,
         {
           rideId: dto.rideId,
+
           driverId: identity.id,
+
           latitude: dto.latitude,
+
           longitude: dto.longitude,
-          timestamp: Date.now(),
+
+          timestamp: dto.timestamp,
         },
       );
 
       this.logger.debug(
-        `DRIVER LOCATION UPDATED | driverId=${identity.id} | rideId=${dto.rideId} | lat=${dto.latitude} | lng=${dto.longitude}`,
+        `DRIVER LOCATION UPDATED | ` +
+          `driverId=${identity.id} | ` +
+          `rideId=${dto.rideId} | ` +
+          `lat=${dto.latitude} | ` +
+          `lng=${dto.longitude}`,
       );
 
       return {
         success: true,
+
+        rideId: dto.rideId,
+
+        timestamp: dto.timestamp,
       };
     } catch (error) {
       throw this.toWsException(error);
     }
   }
 
+  /**
+   * =====================================================
+   * SOCKET IDENTITY
+   * =====================================================
+   */
   private getIdentity(
     client: Socket,
   ): SocketIdentity {
@@ -394,6 +688,59 @@ export class RealtimeGateway
     return identity;
   }
 
+  /**
+   * =====================================================
+   * DATABASE STATUS -> REALTIME STATUS
+   * =====================================================
+   *
+   * Important:
+   *
+   * RideStatus does NOT contain:
+   *
+   * REQUESTED
+   * DRIVER_ARRIVED
+   * NO_DRIVER
+   *
+   * Therefore we only reference values that
+   * actually exist in the RideStatus enum.
+   */
+  private toRealtimeStatus(
+    status: RideStatus,
+  ): RideRealtimeStatus {
+    switch (status) {
+      case RideStatus.SEARCHING:
+        return 'SEARCHING';
+
+      case RideStatus.ACCEPTED:
+        return 'DRIVER_ASSIGNED';
+
+      case RideStatus.DRIVER_ARRIVING:
+        return 'DRIVER_ARRIVING';
+
+      case RideStatus.IN_PROGRESS:
+        return 'IN_PROGRESS';
+
+      case RideStatus.COMPLETED:
+        return 'COMPLETED';
+
+      case RideStatus.CANCELLED:
+        return 'CANCELLED';
+
+      default:
+        /**
+         * Fallback for any future RideStatus
+         * values that are not yet represented
+         * by realtime events.
+         */
+        return 'SEARCHING';
+    }
+  }
+
+  /**
+   * =====================================================
+   * WEBSOCKET ERROR CONVERSION
+   * =====================================================
+   */
   private toWsException(
     error: unknown,
   ): WsException {
@@ -412,6 +759,11 @@ export class RealtimeGateway
     );
   }
 
+  /**
+   * =====================================================
+   * ERROR MESSAGE
+   * =====================================================
+   */
   private getErrorMessage(
     error: unknown,
   ): string {

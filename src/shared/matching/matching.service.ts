@@ -1,9 +1,16 @@
-import { Injectable, Logger,NotFoundException,} from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
+
 import { Ride } from '../../database/entities/ride.entity';
 import { Driver } from '../../database/entities/driver.entity';
+
 import { DriverStatus } from '../../shared/types/driver-status.enum';
 import { RideStatus } from '../../shared/types/ride-status.enum';
+
 import { RoutingService } from '../../routing/routing.service';
 
 @Injectable()
@@ -17,13 +24,26 @@ export class MatchingService {
     private readonly routingService: RoutingService,
   ) {}
 
+  /**
+   * Find nearby available drivers and order them
+   * by REAL driving ETA from OSRM.
+   *
+   * PostGIS:
+   *   Finds nearby candidates.
+   *
+   * OSRM:
+   *   Determines the actual driving route,
+   *   distance and ETA.
+   */
   async findNearbyDrivers(
     rideId: string,
     radiusMeters = 3000,
   ): Promise<Driver[]> {
     const em = this.em.fork();
 
-    
+    /**
+     * Make sure the ride is still searching.
+     */
     const ride = await em.findOne(Ride, {
       id: rideId,
       status: RideStatus.SEARCHING,
@@ -36,70 +56,94 @@ export class MatchingService {
       );
     }
 
-  
-    const drivers =await em.getConnection().execute<  Array<{
-          id: string;
-          latitude: number;
-          longitude: number;
-        }>
-      >(
-        `
-        SELECT
-          d.id,
+    /**
+     * First use PostGIS to find nearby drivers.
+     *
+     * These are only candidates.
+     */
+    const candidates =
+      await em
+        .getConnection()
+        .execute<
+          Array<{
+            id: string;
+            latitude: number;
+            longitude: number;
+          }>
+        >(
+          `
+          SELECT
+            d.id,
 
-          ST_Y(
-            d.location::geometry
-          ) AS latitude,
+            ST_Y(
+              d.location::geometry
+            ) AS latitude,
 
-          ST_X(
-            d.location::geometry
-          ) AS longitude
+            ST_X(
+              d.location::geometry
+            ) AS longitude
 
-        FROM drivers d
+          FROM drivers d
 
-        WHERE
-          d.status = ?
-          AND d.deleted_at IS NULL
-          AND d.location IS NOT NULL
-          AND d.last_location_update >= NOW() - INTERVAL '30 seconds'
+          WHERE
+            d.status = ?
+            AND d.deleted_at IS NULL
+            AND d.location IS NOT NULL
 
-          AND ST_DWithin(
-            d.location,
-            ST_SetSRID(
-              ST_MakePoint(?, ?),
-              4326
-            )::geography,
-            ?
-          )
+            AND d.last_location_update >=
+              NOW() - INTERVAL '30 seconds'
 
-        ORDER BY
-          ST_Distance(
-            d.location,
-            ST_SetSRID(
-              ST_MakePoint(?, ?),
-              4326
-            )::geography
-          ) ASC
+            AND ST_DWithin(
+              d.location,
+              ST_SetSRID(
+                ST_MakePoint(?, ?),
+                4326
+              )::geography,
+              ?
+            )
 
-        LIMIT 20
-        `,
-        [
-          DriverStatus.AVAILABLE,
-          ride.pickupLng,
-          ride.pickupLat,
-          radiusMeters,
-          ride.pickupLng,
-          ride.pickupLat,
-        ],
+          ORDER BY
+            ST_Distance(
+              d.location,
+              ST_SetSRID(
+                ST_MakePoint(?, ?),
+                4326
+              )::geography
+            ) ASC
+
+          LIMIT 20
+          `,
+          [
+            DriverStatus.AVAILABLE,
+
+            ride.pickupLng,
+            ride.pickupLat,
+
+            radiusMeters,
+
+            ride.pickupLng,
+            ride.pickupLat,
+          ],
+        );
+
+    if (candidates.length === 0) {
+      this.logger.debug(
+        `NO NEARBY DRIVERS | rideId=${ride.id}`,
       );
 
-    if (drivers.length === 0) {
-      this.logger.debug( `NO NEARBY DRIVERS | rideId=${ride.id}`,  );
       return [];
     }
 
-    const driverIds = drivers.map(  (driver) => driver.id,  );
-    const driverEntities = await em.find( Driver, {
+    /**
+     * Load Driver entities.
+     */
+    const driverIds = candidates.map(
+      (candidate) => candidate.id,
+    );
+
+    const driverEntities = await em.find(
+      Driver,
+      {
         id: {
           $in: driverIds,
         },
@@ -111,7 +155,6 @@ export class MatchingService {
       return [];
     }
 
-    
     const driverMap = new Map(
       driverEntities.map((driver) => [
         driver.id,
@@ -119,73 +162,105 @@ export class MatchingService {
       ]),
     );
 
+    /**
+     * Ask OSRM for a real driving route for
+     * every candidate.
+     */
     const matchedDrivers = await Promise.all(
-        drivers.map(async (candidate) => {
-          const driver = driverMap.get(candidate.id);
-          if (!driver) {
-            return null;
-          }
+      candidates.map(async (candidate) => {
+        const driver = driverMap.get(
+          candidate.id,
+        );
 
-          try {
-            const route =    await this.routingService.getDriverToPickupRoute(
-                {
-                  latitude: Number(candidate.latitude,),
-                  longitude: Number( candidate.longitude, ),
-                },
-                {
-                  latitude: Number(  ride.pickupLat,),
-                  longitude: Number( ride.pickupLng,),
-                },
-              );
+        if (!driver) {
+          return null;
+        }
 
-            return {
-              driver,
-              distanceMeters: route.distance,
-              durationSeconds:   route.duration,
-            };
-          } catch (error) {
-          
-            this.logger.warn(
-              `OSRM ROUTE FAILED | ` +
-                `rideId=${ride.id} | ` +
-                `driverId=${candidate.id} | ` +
-                `error=${
-                  error instanceof Error
-                    ? error.message
-                    : String(error)
-                }`,
+        try {
+          const route =
+            await this.routingService.getDriverToPickupRoute(
+              {
+                latitude: Number(
+                  candidate.latitude,
+                ),
+                longitude: Number(
+                  candidate.longitude,
+                ),
+              },
+              {
+                latitude: Number(
+                  ride.pickupLat,
+                ),
+                longitude: Number(
+                  ride.pickupLng,
+                ),
+              },
             );
-            return null;
-          }
-        }),
-      );
 
-  
-    const validMatches = matchedDrivers.filter(
-        (  match,): match is {
+          return {
+            driver,
+
+            distanceMeters:
+              route.distanceMeters,
+
+            durationSeconds:
+              route.durationSeconds,
+          };
+        } catch (error) {
+          this.logger.warn(
+            `OSRM ROUTE FAILED | ` +
+              `rideId=${ride.id} | ` +
+              `driverId=${candidate.id} | ` +
+              `error=${
+                error instanceof Error
+                  ? error.message
+                  : String(error)
+              }`,
+          );
+
+          return null;
+        }
+      }),
+    );
+
+    /**
+     * Remove drivers for whom OSRM could not
+     * calculate a route.
+     */
+    const validMatches =
+      matchedDrivers.filter(
+        (
+          match,
+        ): match is {
           driver: Driver;
           distanceMeters: number;
           durationSeconds: number;
         } => match !== null,
       );
 
-
     if (validMatches.length === 0) {
       this.logger.warn(
         `NO ROUTABLE DRIVERS | rideId=${ride.id}`,
       );
+
       return [];
     }
 
- 
+    /**
+     * IMPORTANT:
+     *
+     * Sort by actual driving ETA.
+     *
+     * The first driver is the driver who should
+     * receive the first offer.
+     */
     validMatches.sort(
       (a, b) =>
         a.durationSeconds -
         b.durationSeconds,
     );
 
-   
-    for ( const match of validMatches ) {
+    for (const match of validMatches) {
       this.logger.debug(
         `DRIVER MATCH | ` +
           `rideId=${ride.id} | ` +
@@ -199,7 +274,6 @@ export class MatchingService {
       );
     }
 
-  
     return validMatches.map(
       (match) => match.driver,
     );

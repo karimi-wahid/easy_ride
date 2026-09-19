@@ -11,10 +11,7 @@ export type RideRealtimeStatus =
 
 export interface RideStateChangedEvent {
   rideId: string;
-
   previousStatus?: RideRealtimeStatus;
-
   status: RideRealtimeStatus;
-
   changedAt: string;
 }

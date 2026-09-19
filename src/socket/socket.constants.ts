@@ -1,29 +1,32 @@
 export const REALTIME_EVENTS = {
-  
+  // Driver offer events
   RIDE_OFFER: 'ride:offer',
   RIDE_OFFER_EXPIRED: 'ride:offer_expired',
   RIDE_OFFER_CANCELLED: 'ride:offer_cancelled',
 
-
+  // Ride events
   RIDE_ACCEPTED: 'ride:accepted',
   RIDE_REJECTED: 'ride:rejected',
   RIDE_DRIVER_ASSIGNED: 'ride:driver_assigned',
   RIDE_STATE_CHANGED: 'ride:state_changed',
 
+  DRIVER_ARRIVED: 'ride:driver_arrived',
+  RIDE_STARTED: 'ride:started',
+  RIDE_COMPLETED: 'ride:completed',
+  RIDE_CANCELLED: 'ride:cancelled',
 
-  DRIVER_ARRIVED:'ride:driver_arrived',
-  RIDE_STARTED:'ride:started',
-  RIDE_COMPLETED:'ride:completed',
-  RIDE_CANCELLED:'ride:cancelled',
-
+  // Driver location
   DRIVER_LOCATION: 'driver:location',
 
-
+  // Client -> server events
   JOIN_RIDE: 'ride:join',
   LEAVE_RIDE: 'ride:leave',
+
   ACCEPT_RIDE: 'ride:accept',
   REJECT_RIDE: 'ride:reject',
-  DRIVER_LOCATION_UPDATE: 'driver:location_update',
+
+  DRIVER_LOCATION_UPDATE:
+    'driver:location_update',
 } as const;
 
 export const REALTIME_ROOMS = {

@@ -1,14 +1,35 @@
-import { Injectable, UnauthorizedException,} from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+
 import { ConfigService } from '@nestjs/config';
-import { EntityManager } from '@mikro-orm/postgresql';
+
+import {
+  EntityManager,
+} from '@mikro-orm/postgresql';
+
 import { JwtService } from '@nestjs/jwt';
-import { Socket } from 'socket.io';
-import { DriverSession } from '../database/entities/driver-session.entity';
-import { Driver } from '../database/entities/driver.entity';
-import { UserSession } from '../database/entities/user-session.entity';
-import { User } from '../database/entities/user.entity';
 
+import {
+  Socket,
+} from 'socket.io';
 
+import {
+  DriverSession,
+} from '../database/entities/driver-session.entity';
+
+import {
+  Driver,
+} from '../database/entities/driver.entity';
+
+import {
+  UserSession,
+} from '../database/entities/user-session.entity';
+
+import {
+  User,
+} from '../database/entities/user.entity';
 
 type AccessTokenPayload = {
   sub: string;
@@ -26,7 +47,6 @@ type SocketIdentity =
       id: string;
     };
 
-
 @Injectable()
 export class SocketAuthMiddleware {
   constructor(
@@ -35,31 +55,45 @@ export class SocketAuthMiddleware {
     private readonly jwtService: JwtService,
   ) {}
 
-
   async authenticate(
     client: Socket,
-    next: (err?: Error) => void,
+    next: (
+      err?: Error,
+    ) => void,
   ): Promise<void> {
     try {
-      const token = client.handshake.auth?.token;
+      const token =
+  client.handshake.auth?.token ??
+  client.handshake.query?.token;
 
-      if (!token) {
+
+      if (
+        typeof token !== 'string' ||
+        token.length === 0
+      ) {
         throw new UnauthorizedException(
           'Socket token missing',
         );
       }
 
-      const secret = this.configService.getOrThrow<string>(  'JWT_ACCESS_SECRET',);
+      const secret =
+        this.configService.getOrThrow<string>(
+          'JWT_ACCESS_SECRET',
+        );
 
-      const payload =  await this.jwtService.verifyAsync<AccessTokenPayload>(
-        token,
+      const payload =
+        await this.jwtService.verifyAsync<AccessTokenPayload>(
+          token,
           {
             secret,
           },
         );
 
-
-      if (!payload.sub ||!payload.phone ||!payload.sid ) {
+      if (
+        !payload.sub ||
+        !payload.phone ||
+        !payload.sid
+      ) {
         throw new UnauthorizedException(
           'Invalid access token',
         );
@@ -67,7 +101,12 @@ export class SocketAuthMiddleware {
 
       const em = this.em.fork();
 
-      const driverSession = await em.findOne(   DriverSession,
+      /**
+       * First check driver sessions.
+       */
+      const driverSession =
+        await em.findOne(
+          DriverSession,
           {
             id: payload.sid,
             revokedAt: null,
@@ -77,20 +116,25 @@ export class SocketAuthMiddleware {
           },
         );
 
-
       if (driverSession) {
         if (
-          driverSession.expiresAt <= new Date()
+          driverSession.expiresAt <=
+          new Date()
         ) {
           throw new UnauthorizedException(
             'Driver session has expired',
           );
         }
 
+        const driver =
+          driverSession.driver;
 
-        const driver = driverSession.driver;
-
-        if (!driver ||driver.id !== payload.sub ||driver.phone !== payload.phone ||driver.deletedAt ) {
+        if (
+          !driver ||
+          driver.id !== payload.sub ||
+          driver.phone !== payload.phone ||
+          driver.deletedAt
+        ) {
           throw new UnauthorizedException(
             'Driver session is invalid',
           );
@@ -101,13 +145,18 @@ export class SocketAuthMiddleware {
           id: driver.id,
         };
 
-        client.data.identity = identity;
+        client.data.identity =
+          identity;
+
         next();
         return;
       }
 
-    
-      const userSession = await em.findOne(
+      /**
+       * Then check user sessions.
+       */
+      const userSession =
+        await em.findOne(
           UserSession,
           {
             id: payload.sid,
@@ -118,19 +167,25 @@ export class SocketAuthMiddleware {
           },
         );
 
-
       if (userSession) {
         if (
-          userSession.expiresAt <= new Date()
+          userSession.expiresAt <=
+          new Date()
         ) {
           throw new UnauthorizedException(
             'User session has expired',
           );
         }
 
-        const user =   userSession.user;
+        const user =
+          userSession.user;
 
-        if (!user ||user.id !== payload.sub ||user.phone !== payload.phone ||user.deletedAt) {
+        if (
+          !user ||
+          user.id !== payload.sub ||
+          user.phone !== payload.phone ||
+          user.deletedAt
+        ) {
           throw new UnauthorizedException(
             'User session is invalid',
           );
@@ -141,16 +196,16 @@ export class SocketAuthMiddleware {
           id: user.id,
         };
 
-        client.data.identity = identity;
+        client.data.identity =
+          identity;
+
         next();
         return;
       }
 
-  
       throw new UnauthorizedException(
         'Socket session is invalid or revoked',
       );
-      
     } catch (error) {
       const message =
         error instanceof Error
@@ -158,7 +213,9 @@ export class SocketAuthMiddleware {
           : 'Socket authentication failed';
 
       next(
-        new UnauthorizedException(message),
+        new UnauthorizedException(
+          message,
+        ),
       );
     }
   }
