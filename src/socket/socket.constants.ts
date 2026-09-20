@@ -1,10 +1,10 @@
 export const REALTIME_EVENTS = {
-  // Driver offer events
+  
   RIDE_OFFER: 'ride:offer',
   RIDE_OFFER_EXPIRED: 'ride:offer_expired',
   RIDE_OFFER_CANCELLED: 'ride:offer_cancelled',
 
-  // Ride events
+  
   RIDE_ACCEPTED: 'ride:accepted',
   RIDE_REJECTED: 'ride:rejected',
   RIDE_DRIVER_ASSIGNED: 'ride:driver_assigned',
@@ -15,10 +15,10 @@ export const REALTIME_EVENTS = {
   RIDE_COMPLETED: 'ride:completed',
   RIDE_CANCELLED: 'ride:cancelled',
 
-  // Driver location
+  
   DRIVER_LOCATION: 'driver:location',
 
-  // Client -> server events
+  
   JOIN_RIDE: 'ride:join',
   LEAVE_RIDE: 'ride:leave',
 

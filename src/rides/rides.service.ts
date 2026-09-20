@@ -75,7 +75,7 @@ export class RidesService {
     await this.em.flush();
 
     await this.rideMatchingQueue.addMatchingJob(
-      ride.id,
+  
     );
 
     return ride;
