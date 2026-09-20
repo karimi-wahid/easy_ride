@@ -26,148 +26,248 @@ export class MatchingWorker extends WorkerHost {
 
   async process( job: Job,): Promise<void> {
     switch (job.name) {
-      case RIDE_MATCHING_JOB:  await this.handleMatchingScan(
+      case RIDE_MATCHING_JOB:
+        await this.handleMatchingScan(
           job as Job<RideMatchingJobData>,
         );
         return;
-      case RIDE_OFFER_TIMEOUT_JOB:  await this.handleOfferTimeoutJob(
+
+      case RIDE_OFFER_TIMEOUT_JOB:
+        await this.handleOfferTimeoutJob(
           job as Job<RideOfferTimeoutJobData>,
         );
         return;
+
       default:
-        this.logger.warn( `UNKNOWN MATCHING JOB | ` +    `name=${job.name} | ` +    `jobId=${job.id}`,  );
+        this.logger.warn(
+          `UNKNOWN MATCHING JOB | ` +
+          `name=${job.name} | ` +
+          `jobId=${job.id}`,
+        );
     }
   }
 
- 
-  private async handleMatchingScan(job: Job<RideMatchingJobData>, ): Promise<void> {
-    this.logger.log( `MATCHING DATABASE SCAN STARTED | ` + `jobId=${job.id}`,);
+
+  private async handleMatchingScan(
+    job: Job<RideMatchingJobData>,
+  ): Promise<void> {
+    this.logger.log(
+      `MATCHING DATABASE SCAN STARTED | ` +
+      `jobId=${job.id}`,
+    );
 
     try {
-      const rides =await this.matchingService  .findSearchingRides();
+      const rides =
+        await this.matchingService.findSearchingRides();
+
       if (rides.length === 0) {
-        this.logger.debug(  `NO SEARCHING RIDES`,);
+        this.logger.debug(
+          `NO SEARCHING RIDES`,
+        );
+
         await this.scheduleNextMatchingScan(
           this.MATCHING_RETRY_MS,
           'NO_SEARCHING_RIDES',
         );
+
         return;
       }
-      this.logger.log(`SEARCHING RIDES FOUND | ` +`count=${rides.length}`,  );
+
+      this.logger.log(
+        `SEARCHING RIDES FOUND | ` +
+        `count=${rides.length}`,
+      );
 
       for (const ride of rides) {
         try {
-          await this.processRide(  ride.id,);
+          await this.processRide(
+            ride.id,
+          );
         } catch (error) {
-          this.logger.error(  `RIDE MATCHING FAILED | ` +  `rideId=${ride.id}`,
-            error instanceof Error  
-            ? error.stack  
-            : String(error),
+          this.logger.error(
+            `RIDE MATCHING FAILED | ` +
+            `rideId=${ride.id}`,
+            error instanceof Error
+              ? error.stack
+              : String(error),
           );
         }
       }
 
-      await this.scheduleNextMatchingScan( this.MATCHING_RETRY_MS,'SCAN_COMPLETE',);
+      await this.scheduleNextMatchingScan(
+        this.MATCHING_RETRY_MS,
+        'SCAN_COMPLETE',
+      );
+
     } catch (error) {
-      this.logger.error( `MATCHING DATABASE SCAN FAILED`,
+      this.logger.error(
+        `MATCHING DATABASE SCAN FAILED`,
         error instanceof Error
           ? error.stack
           : String(error),
       );
-      await this.scheduleNextMatchingScan(  this.MATCHING_RETRY_MS, 'SCAN_ERROR', );
+
+      await this.scheduleNextMatchingScan(
+        this.MATCHING_RETRY_MS,
+        'SCAN_ERROR',
+      );
     }
   }
 
+private async processRide(
+  rideId: string,
+): Promise<void> {
+  this.logger.log(
+    `PROCESSING SEARCHING RIDE | ` +
+    `rideId=${rideId}`,
+  );
 
-  private async processRide(rideId: string, ): Promise<void> {
-    this.logger.log(`PROCESSING SEARCHING RIDE | ` +  `rideId=${rideId}`,);
-    const state =await this.matchingService.getMatchingState(rideId,);
+  const state =
+    await this.matchingService.getMatchingState(
+      rideId,
+    );
 
-    if (!state.exists) {
-      this.logger.debug( `RIDE NOT FOUND | ` + `rideId=${rideId}`,);
-      return;
-    }
+  if (!state.exists) {
+    this.logger.debug(
+      `RIDE NOT FOUND | ` +
+      `rideId=${rideId}`,
+    );
 
-    if (!state.searching) {
-      this.logger.debug(  `RIDE NO LONGER SEARCHING | ` + `rideId=${rideId} | ` + `status=${state.status}`,);
-      return;
-    }
+    return;
+  }
 
-    const drivers =  await this.matchingService.findNearbyDrivers(
-          rideId,
-          this.SEARCH_RADIUS_METERS,
-        );
+  if (!state.searching) {
+    this.logger.debug(
+      `RIDE NO LONGER SEARCHING | ` +
+      `rideId=${rideId} | ` +
+      `status=${state.status}`,
+    );
 
-    if (drivers.length === 0) {
-      this.logger.debug(  `NO DRIVER FOR RIDE | ` +  `rideId=${rideId}`,);
-      return;
-    }
+    return;
+  }
+
+  const drivers =
+    await this.matchingService.findNearbyDrivers(
+      rideId,
+      this.SEARCH_RADIUS_METERS,
+    );
+
+  if (drivers.length === 0) {
+    this.logger.debug(
+      `NO DRIVER FOR RIDE | ` +
+      `rideId=${rideId}`,
+    );
+
+    return;
+  }
     
-    for (const driver of drivers) {
-      const currentState = await this.matchingService
-          .getMatchingState(
-            rideId,
-          );
+  for (const driverMatch of drivers) {
+    const currentState =
+      await this.matchingService.getMatchingState(
+        rideId,
+      );
 
-      if (!currentState.exists ||  !currentState.searching) {
-        this.logger.debug(  `RIDE STOPPED DURING MATCHING | ` +`rideId=${rideId} | ` + `status=${currentState.status}`, );
-        return;
-      }
+    if (
+      !currentState.exists ||
+      !currentState.searching
+    ) {
+      this.logger.debug(
+        `RIDE STOPPED DURING MATCHING | ` +
+        `rideId=${rideId} | ` +
+        `status=${currentState.status}`,
+      );
 
-      try {
-        const offer =  await this.rideOfferService
-            .createOffer(
-              rideId,
-              driver,
-              this.OFFER_TIMEOUT_MS / 1000,
-            );
-
-        if (!offer) {
-          this.logger.debug( `DRIVER SKIPPED | ` + `rideId=${rideId} | ` + `driverId=${driver.id}`, );
-          continue;
-        }
-        this.sendDriverOffer( offer,);
-
-        this.logger.log(
-          `OFFER SENT | ` +
-          `rideId=${rideId} | ` +
-          `driverId=${offer.driver.id} | ` +
-          `offerId=${offer.id} | ` +
-          `expiresAt=${offer.expiresAt.toISOString()}`,
-        );
-        return;
-
-      } catch (error) {
-        this.logger.warn(
-          `DRIVER OFFER CREATION SKIPPED | ` +
-          `rideId=${rideId} | ` +
-          `driverId=${driver.id} | ` +
-          `error=${this.getErrorMessage(error)}`,
-        );
-      }
+      return;
     }
-    this.logger.debug(  `ALL DRIVERS UNUSABLE | ` +  `rideId=${rideId}`, );
+
+    try {
+      const offer =
+        await this.rideOfferService.createOffer(
+          rideId,
+          driverMatch.driver,
+          this.OFFER_TIMEOUT_MS / 1000,
+        );
+
+      if (!offer) {
+        this.logger.debug(
+          `DRIVER SKIPPED | ` +
+          `rideId=${rideId} | ` +
+          `driverId=${driverMatch.driver.id}`,
+        );
+
+        continue;
+      }
+
+      this.sendDriverOffer(
+        offer,
+        driverMatch.geometry,
+      );
+
+      this.logger.log(
+        `OFFER SENT | ` +
+        `rideId=${rideId} | ` +
+        `driverId=${offer.driver.id} | ` +
+        `offerId=${offer.id} | ` +
+        `expiresAt=${offer.expiresAt.toISOString()}`,
+      );
+
+      return;
+
+    } catch (error) {
+      this.logger.warn(
+        `DRIVER OFFER CREATION SKIPPED | ` +
+        `rideId=${rideId} | ` +
+        `driverId=${driverMatch.driver.id} | ` +
+        `error=${this.getErrorMessage(error)}`,
+      );
+    }
   }
 
-  
-  private async handleOfferTimeoutJob(job: Job<RideOfferTimeoutJobData>, ): Promise<void> {
-    const { rideId, offerId,} = job.data;
-    this.logger.debug(   `OFFER TIMEOUT CHECK | ` +`rideId=${rideId} | ` +`offerId=${offerId}`, );
+  this.logger.debug(
+    `ALL DRIVERS UNUSABLE | ` +
+    `rideId=${rideId}`,
+  );
+}
+
+
+
+  private async handleOfferTimeoutJob(
+    job: Job<RideOfferTimeoutJobData>,
+  ): Promise<void> {
+    const {
+      rideId,
+      offerId,
+    } = job.data;
+
+    this.logger.debug(
+      `OFFER TIMEOUT CHECK | ` +
+      `rideId=${rideId} | ` +
+      `offerId=${offerId}`,
+    );
     
     try {
-      const expired = await this.rideOfferService .expireOfferIfPending( offerId,);
+      const expired =
+        await this.rideOfferService.expireOfferIfPending(
+          offerId,
+        );
 
       if (!expired) {
-        this.logger.debug( `OFFER TIMEOUT IGNORED | ` + `rideId=${rideId} | ` + `offerId=${offerId}`,  );
+        this.logger.debug(
+          `OFFER TIMEOUT IGNORED | ` +
+          `rideId=${rideId} | ` +
+          `offerId=${offerId}`,
+        );
+
         return;
       }
 
-      this.realtimeService.notifyOfferExpired( expired.driverId,
-          {
-            offerId:  expired.offerId,
-            rideId:  expired.rideId,
-          },
-        );
+      this.realtimeService.notifyOfferExpired(
+        expired.driverId,
+        {
+          offerId:expired.offerId,
+          rideId:expired.rideId,
+        },
+      );
 
       this.logger.log(
         `OFFER EXPIRED | ` +
@@ -176,20 +276,29 @@ export class MatchingWorker extends WorkerHost {
         `driverId=${expired.driverId}`,
       );
 
-      const state = await this.matchingService .getMatchingState(
-            expired.rideId,
-          );
+      const state =
+        await this.matchingService.getMatchingState(
+          expired.rideId,
+        );
 
-      if ( !state.exists || !state.searching ) {
+      if (
+        !state.exists ||
+        !state.searching
+      ) {
         this.logger.debug(
           `MATCHING NOT CONTINUED | ` +
           `rideId=${expired.rideId} | ` +
           `status=${state.status}`,
         );
+
         return;
       }
 
-      await this.scheduleNextMatchingScan( 0, 'OFFER_EXPIRED',);
+      await this.scheduleNextMatchingScan(
+        0,
+        'OFFER_EXPIRED',
+      );
+
     } catch (error) {
       this.logger.error(
         `OFFER TIMEOUT FAILED | ` +
@@ -199,13 +308,19 @@ export class MatchingWorker extends WorkerHost {
           ? error.stack
           : String(error),
       );
-      const state =   await this.matchingService
-          .getMatchingState(
-            rideId,
-          );
-      if ( !state.exists ||!state.searching ) {
+
+      const state =
+        await this.matchingService.getMatchingState(
+          rideId,
+        );
+
+      if (
+        !state.exists ||
+        !state.searching
+      ) {
         return;
       }
+
       await this.scheduleNextMatchingScan(
         this.MATCHING_RETRY_MS,
         'TIMEOUT_ERROR',
@@ -214,8 +329,14 @@ export class MatchingWorker extends WorkerHost {
   }
 
 
-  private async scheduleNextMatchingScan(   delayMs: number,   reason: string,): Promise<void> {
-    await this.rideMatchingQueue  .addMatchingJob(   delayMs, );
+  private async scheduleNextMatchingScan(
+    delayMs: number,
+    reason: string,
+  ): Promise<void> {
+    await this.rideMatchingQueue.addMatchingJob(
+      delayMs,
+    );
+
     this.logger.debug(
       `NEXT MATCHING SCAN SCHEDULED | ` +
       `delay=${delayMs}ms | ` +
@@ -224,32 +345,65 @@ export class MatchingWorker extends WorkerHost {
   }
 
 
-  private sendDriverOffer( offer: NonNullable<
-     Awaited<
+  private sendDriverOffer(
+    offer: NonNullable<
+      Awaited<
         ReturnType<
           RideOfferService['createOffer']
-        >> >,
+        >
+      >
+    >,
+    geometry?: {
+      type: 'LineString';
+      coordinates: number[][];
+    },
   ): void {
     const ride = offer.ride;
-    this.realtimeService .sendDriverOffer(
-        offer.driver.id,
-        {
-          offerId: offer.id,
-          rideId: ride.id,
-          pickup: { latitude: Number(ride.pickupLat,),longitude: Number(ride.pickupLng, ),},
-          destination: { latitude: Number(ride.destinationLat,),longitude: Number(ride.destinationLng, ), },
-          estimatedDistance:  ride.estimatedDistanceKm ??  undefined,
-          estimatedDuration:ride.estimatedDurationMinutes ??undefined,
-          estimatedPrice: ride.estimatedFare ?? undefined,
-          expiresAt:offer.expiresAt.toISOString(),
+
+    this.realtimeService.sendDriverOffer(
+      offer.driver.id,
+      {
+        offerId:offer.id,
+        rideId:ride.id,
+
+        pickup: {
+          latitude:Number(ride.pickupLat),
+          longitude:Number(ride.pickupLng),
         },
-      );
+
+        destination: {
+          latitude:Number(ride.destinationLat),
+          longitude:Number(ride.destinationLng),
+        },
+
+        geometry,
+
+        estimatedDistance:
+          ride.estimatedDistanceKm ??
+          undefined,
+
+        estimatedDuration:
+          ride.estimatedDurationMinutes ??
+          undefined,
+
+        estimatedPrice:
+          ride.estimatedFare ??
+          undefined,
+
+        expiresAt:
+          offer.expiresAt.toISOString(),
+      },
+    );
   }
 
-  private getErrorMessage( error: unknown, ): string {
+
+  private getErrorMessage(
+    error: unknown,
+  ): string {
     if (error instanceof Error) {
       return error.message;
     }
+
     return String(error);
   }
 }

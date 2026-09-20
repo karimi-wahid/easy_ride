@@ -12,6 +12,11 @@ export interface RideOfferEvent {
     longitude: number;
   };
 
+  geometry?: {
+    type: 'LineString';
+    coordinates: number[][];
+  };
+
   estimatedDistance?: number;
   estimatedDuration?: number;
   estimatedPrice?: number;

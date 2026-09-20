@@ -1,5 +1,5 @@
 import { Injectable, Logger,} from '@nestjs/common';
-import {EntityManager,} from '@mikro-orm/postgresql';
+import { EntityManager,} from '@mikro-orm/postgresql';
 import { Ride } from '../../database/entities/ride.entity';
 import { Driver } from '../../database/entities/driver.entity';
 import { RideOffer } from '../../database/entities/ride-driver-offer.entity';
@@ -7,6 +7,11 @@ import { DriverStatus } from '../../shared/types/driver-status.enum';
 import { OfferStatus } from '../../shared/types/offer-status.enum';
 import { RideStatus } from '../../shared/types/ride-status.enum';
 import { RideMatchingQueue } from './ride-matching.queue';
+
+export interface DriverRouteGeometry {
+  type: 'LineString';
+  coordinates: number[][];
+}
 
 @Injectable()
 export class RideOfferService {
