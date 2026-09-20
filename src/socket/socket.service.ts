@@ -1,30 +1,88 @@
-import { BadRequestException, Injectable, Logger,} from '@nestjs/common';
-import {Namespace,Socket,} from 'socket.io';
-import {REALTIME_EVENTS,  SOCKET_ROOMS,} from './socket.constants';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
+
+import {
+  Namespace,
+  Socket,
+} from 'socket.io';
+
+import {
+  REALTIME_EVENTS,
+  SOCKET_ROOMS,
+} from './socket.constants';
+
 import { RideOfferEvent } from './events/ride-offer.events';
 import { RideAcceptedEvent } from './events/ride-accepted.event';
 import { DriverLocationEvent } from './events/driver-location.event';
 import { RideStateChangedEvent } from './events/ride-state-changed.event';
 
+type RideRoutePhase =
+  | 'DRIVER_TO_PICKUP'
+  | 'PICKUP_TO_DESTINATION';
+
+type RideRoutePayload = {
+  rideId: string;
+
+  phase: RideRoutePhase;
+
+  route: {
+    distance: number;
+    duration: number;
+
+    distanceMeters: number;
+    durationSeconds: number;
+
+    geometry?: {
+      type: 'LineString';
+      coordinates: number[][];
+    };
+
+    instructions: {
+      text: string;
+      distance: number;
+      duration: number;
+      type?: string;
+      modifier?: string;
+      location?: number[];
+    }[];
+  };
+};
+
 @Injectable()
 export class RealtimeService {
-  private readonly logger = new Logger(RealtimeService.name,);
+  private readonly logger = new Logger(
+    RealtimeService.name,
+  );
+
   private namespace?: Namespace;
 
   setServer(namespace: Namespace): void {
     this.namespace = namespace;
-    this.logger.log( 'Socket.IO /rides namespace registered',);
+
+    this.logger.log(
+      'Socket.IO /rides namespace registered',
+    );
   }
 
-
-  sendDriverOffer(  driverId: string,  payload: RideOfferEvent,): void {
+  sendDriverOffer(
+    driverId: string,
+    payload: RideOfferEvent,
+  ): void {
     this.ensureServer();
-    const room = SOCKET_ROOMS.driver(  driverId,);
-    this.namespace!.to(room)
+
+    const room =
+      SOCKET_ROOMS.driver(driverId);
+
+    this.namespace!
+      .to(room)
       .emit(
         REALTIME_EVENTS.RIDE_OFFER,
         payload,
       );
+
     this.logger.log(
       `RIDE OFFER SENT | ` +
         `driverId=${driverId} | ` +
@@ -34,15 +92,22 @@ export class RealtimeService {
     );
   }
 
- 
-  notifyRideAccepted( userId: string, payload: RideAcceptedEvent,): void {
+  notifyRideAccepted(
+    userId: string,
+    payload: RideAcceptedEvent,
+  ): void {
     this.ensureServer();
-    const room = SOCKET_ROOMS.user(  userId, );
-    this.namespace! .to(room)
+
+    const room =
+      SOCKET_ROOMS.user(userId);
+
+    this.namespace!
+      .to(room)
       .emit(
         REALTIME_EVENTS.RIDE_ACCEPTED,
         payload,
       );
+
     this.logger.log(
       `RIDE ACCEPTED NOTIFICATION SENT | ` +
         `userId=${userId} | ` +
@@ -51,15 +116,22 @@ export class RealtimeService {
     );
   }
 
- 
-  notifyRideDriverAssigned(  rideId: string,  payload: RideAcceptedEvent,): void {
+  notifyRideDriverAssigned(
+    rideId: string,
+    payload: RideAcceptedEvent,
+  ): void {
     this.ensureServer();
-    const room = SOCKET_ROOMS.ride( rideId, );
-    this.namespace! .to(room)
+
+    const room =
+      SOCKET_ROOMS.ride(rideId);
+
+    this.namespace!
+      .to(room)
       .emit(
         REALTIME_EVENTS.RIDE_DRIVER_ASSIGNED,
         payload,
       );
+
     this.logger.log(
       `DRIVER ASSIGNED SENT | ` +
         `rideId=${rideId} | ` +
@@ -68,15 +140,22 @@ export class RealtimeService {
     );
   }
 
-
-  notifyDriverLocation(  rideId: string,  payload: DriverLocationEvent,): void {
+  notifyDriverLocation(
+    rideId: string,
+    payload: DriverLocationEvent,
+  ): void {
     this.ensureServer();
-    const room = SOCKET_ROOMS.ride(  rideId,);
-    this.namespace!.to(room)
+
+    const room =
+      SOCKET_ROOMS.ride(rideId);
+
+    this.namespace!
+      .to(room)
       .emit(
         REALTIME_EVENTS.DRIVER_LOCATION,
         payload,
       );
+
     this.logger.debug(
       `DRIVER LOCATION SENT | ` +
         `rideId=${rideId} | ` +
@@ -87,16 +166,22 @@ export class RealtimeService {
     );
   }
 
-
-
-  notifyRideStateChanged( rideId: string, payload: RideStateChangedEvent,): void {
+  notifyRideStateChanged(
+    rideId: string,
+    payload: RideStateChangedEvent,
+  ): void {
     this.ensureServer();
-    const room = SOCKET_ROOMS.ride(  rideId,);
-    this.namespace! .to(room)
+
+    const room =
+      SOCKET_ROOMS.ride(rideId);
+
+    this.namespace!
+      .to(room)
       .emit(
         REALTIME_EVENTS.RIDE_STATE_CHANGED,
         payload,
       );
+
     this.logger.log(
       `RIDE STATE CHANGED SENT | ` +
         `rideId=${rideId} | ` +
@@ -105,16 +190,25 @@ export class RealtimeService {
     );
   }
 
- 
-  notifyOfferExpired( driverId: string, payload:
-     {offerId: string;rideId: string;}, ): void {
-    this.ensureServer()
-    const room = SOCKET_ROOMS.driver(  driverId,);
-    this.namespace! .to(room)
+  notifyOfferExpired(
+    driverId: string,
+    payload: {
+      offerId: string;
+      rideId: string;
+    },
+  ): void {
+    this.ensureServer();
+
+    const room =
+      SOCKET_ROOMS.driver(driverId);
+
+    this.namespace!
+      .to(room)
       .emit(
         REALTIME_EVENTS.RIDE_OFFER_EXPIRED,
         payload,
       );
+
     this.logger.log(
       `RIDE OFFER EXPIRED SENT | ` +
         `driverId=${driverId} | ` +
@@ -124,18 +218,25 @@ export class RealtimeService {
     );
   }
 
- 
-
-  notifyOfferCancelled(driverId: string,payload:
-     {  offerId: string;  rideId: string;},
+  notifyOfferCancelled(
+    driverId: string,
+    payload: {
+      offerId: string;
+      rideId: string;
+    },
   ): void {
     this.ensureServer();
-    const room = SOCKET_ROOMS.driver( driverId, );
-    this.namespace! .to(room)
+
+    const room =
+      SOCKET_ROOMS.driver(driverId);
+
+    this.namespace!
+      .to(room)
       .emit(
         REALTIME_EVENTS.RIDE_OFFER_CANCELLED,
         payload,
       );
+
     this.logger.log(
       `RIDE OFFER CANCELLED SENT | ` +
         `driverId=${driverId} | ` +
@@ -145,20 +246,27 @@ export class RealtimeService {
     );
   }
 
-
-  notifyRideRejected(  userId: string,  payload: {
+  notifyRideRejected(
+    userId: string,
+    payload: {
       rideId: string;
       offerId: string;
       driverId: string;
       reason?: string;
     },
-  ): void { this.ensureServer();
-    const room = SOCKET_ROOMS.user( userId, );
-    this.namespace!.to(room)
+  ): void {
+    this.ensureServer();
+
+    const room =
+      SOCKET_ROOMS.user(userId);
+
+    this.namespace!
+      .to(room)
       .emit(
         REALTIME_EVENTS.RIDE_REJECTED,
         payload,
       );
+
     this.logger.log(
       `RIDE REJECTED SENT | ` +
         `userId=${userId} | ` +
@@ -168,10 +276,55 @@ export class RealtimeService {
     );
   }
 
-  
-  async joinRide( socket: Socket, rideId: string,): Promise<void> {
-    const room = SOCKET_ROOMS.ride(  rideId,);
+  /**
+   * Sends a calculated route to everyone
+   * inside the ride room.
+   *
+   * DRIVER_TO_PICKUP:
+   *     Driver -> Pickup
+   *
+   * PICKUP_TO_DESTINATION:
+   *     Pickup -> Destination
+   */
+  notifyRideRoute(
+    rideId: string,
+    payload: RideRoutePayload,
+  ): void {
+    this.ensureServer();
+
+    const room =
+      SOCKET_ROOMS.ride(rideId);
+
+    this.namespace!
+      .to(room)
+      .emit(
+        REALTIME_EVENTS.RIDE_ROUTE,
+        payload,
+      );
+
+    this.logger.log(
+      `RIDE ROUTE SENT | ` +
+        `rideId=${rideId} | ` +
+        `phase=${payload.phase} | ` +
+        `distance=${payload.route.distance} | ` +
+        `duration=${payload.route.duration} | ` +
+        `distanceMeters=${payload.route.distanceMeters} | ` +
+        `durationSeconds=${payload.route.durationSeconds} | ` +
+        `coordinates=${payload.route.geometry?.coordinates.length ?? 0} | ` +
+        `instructions=${payload.route.instructions.length} | ` +
+        `room=${room}`,
+    );
+  }
+
+  async joinRide(
+    socket: Socket,
+    rideId: string,
+  ): Promise<void> {
+    const room =
+      SOCKET_ROOMS.ride(rideId);
+
     await socket.join(room);
+
     this.logger.log(
       `SOCKET JOINED RIDE | ` +
         `socket=${socket.id} | ` +
@@ -180,10 +333,15 @@ export class RealtimeService {
     );
   }
 
+  async leaveRide(
+    socket: Socket,
+    rideId: string,
+  ): Promise<void> {
+    const room =
+      SOCKET_ROOMS.ride(rideId);
 
-  async leaveRide(  socket: Socket,  rideId: string,): Promise<void> {
-    const room = SOCKET_ROOMS.ride(   rideId,  );
     await socket.leave(room);
+
     this.logger.log(
       `SOCKET LEFT RIDE | ` +
         `socket=${socket.id} | ` +
@@ -192,10 +350,15 @@ export class RealtimeService {
     );
   }
 
- 
-  async joinDriver( socket: Socket, driverId: string, ): Promise<void> {
-    const room = SOCKET_ROOMS.driver(  driverId,  );
+  async joinDriver(
+    socket: Socket,
+    driverId: string,
+  ): Promise<void> {
+    const room =
+      SOCKET_ROOMS.driver(driverId);
+
     await socket.join(room);
+
     this.logger.log(
       `DRIVER ROOM JOINED | ` +
         `socket=${socket.id} | ` +
@@ -204,10 +367,15 @@ export class RealtimeService {
     );
   }
 
- 
-  async joinUser(  socket: Socket,   userId: string,  ): Promise<void> {
-    const room = SOCKET_ROOMS.user(   userId,  );
+  async joinUser(
+    socket: Socket,
+    userId: string,
+  ): Promise<void> {
+    const room =
+      SOCKET_ROOMS.user(userId);
+
     await socket.join(room);
+
     this.logger.log(
       `USER ROOM JOINED | ` +
         `socket=${socket.id} | ` +
@@ -216,41 +384,62 @@ export class RealtimeService {
     );
   }
 
-  isDriverConnected(  driverId: string, ): boolean {
+  isDriverConnected(
+    driverId: string,
+  ): boolean {
     this.ensureServer();
-    const room = SOCKET_ROOMS.driver(  driverId, );
+
+    const room =
+      SOCKET_ROOMS.driver(driverId);
+
     return (
-      (this.namespace!.adapter.rooms.get(
-        room,
-      )?.size ?? 0) > 0
+      (
+        this.namespace!.adapter.rooms.get(
+          room,
+        )?.size ?? 0
+      ) > 0
     );
   }
 
-
-  isUserConnected( userId: string,): boolean {
+  isUserConnected(
+    userId: string,
+  ): boolean {
     this.ensureServer();
-    const room = SOCKET_ROOMS.user(  userId, );
+
+    const room =
+      SOCKET_ROOMS.user(userId);
+
     return (
-      (this.namespace!.adapter.rooms.get(
-        room,
-      )?.size ?? 0) > 0
+      (
+        this.namespace!.adapter.rooms.get(
+          room,
+        )?.size ?? 0
+      ) > 0
     );
   }
 
-
-  isRideConnected(rideId: string,): boolean {
+  isRideConnected(
+    rideId: string,
+  ): boolean {
     this.ensureServer();
-    const room = SOCKET_ROOMS.ride(  rideId,);
+
+    const room =
+      SOCKET_ROOMS.ride(rideId);
+
     return (
-      (this.namespace!.adapter.rooms.get(
-        room,
-      )?.size ?? 0) > 0
+      (
+        this.namespace!.adapter.rooms.get(
+          room,
+        )?.size ?? 0
+      ) > 0
     );
   }
 
-
-  getRoomSize(  room: string, ): number {
+  getRoomSize(
+    room: string,
+  ): number {
     this.ensureServer();
+
     return (
       this.namespace!.adapter.rooms.get(
         room,

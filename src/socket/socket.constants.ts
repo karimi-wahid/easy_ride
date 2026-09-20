@@ -9,6 +9,7 @@ export const REALTIME_EVENTS = {
   RIDE_REJECTED: 'ride:rejected',
   RIDE_DRIVER_ASSIGNED: 'ride:driver_assigned',
   RIDE_STATE_CHANGED: 'ride:state_changed',
+  RIDE_ROUTE: 'ride:route',
 
   DRIVER_ARRIVED: 'ride:driver_arrived',
   RIDE_STARTED: 'ride:started',

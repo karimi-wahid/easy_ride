@@ -17,7 +17,15 @@ import { CreateRideDto } from './dto/create-ride.dto';
 import { AcceptRideDto } from '../socket/dto/accept-ride.dto';
 
 import { RideMatchingQueue } from '../shared/matching/ride-matching.queue';
-import { RoutingService } from 'src/routing/routing.service';
+import {
+  RoutingService,
+  RideRoute,
+} from 'src/routing/routing.service';
+
+interface DriverCoordinates {
+  latitude: number;
+  longitude: number;
+}
 
 @Injectable()
 export class RidesService {
@@ -33,50 +41,66 @@ export class RidesService {
   ): Promise<Ride> {
     this.validateLocations(dto);
 
-    const distanceKm = this.calculateDistanceKm(dto);
+    const distanceKm =
+      this.calculateDistanceKm(dto);
 
-    const estimatedDistanceKm = Number(
-      (distanceKm * 1.25).toFixed(2),
-    );
+    const estimatedDistanceKm =
+      Number(
+        (distanceKm * 1.25).toFixed(2),
+      );
 
     const averageSpeedKmh = 25;
 
-    const estimatedDurationMinutes = Math.max(
-      1,
-      Math.ceil(
-        (estimatedDistanceKm / averageSpeedKmh) * 60,
-      ),
-    );
+    const estimatedDurationMinutes =
+      Math.max(
+        1,
+        Math.ceil(
+          (estimatedDistanceKm /
+            averageSpeedKmh) *
+            60,
+        ),
+      );
 
-    const estimatedFare = Math.round(
-      estimatedDistanceKm * (100 / 6),
-    );
+    const estimatedFare =
+      Math.round(
+        estimatedDistanceKm *
+          (100 / 6),
+      );
 
     const ride = new Ride();
 
     ride.userId = userId;
     ride.driverId = null;
 
-    ride.pickupLat = dto.pickupLat;
-    ride.pickupLng = dto.pickupLng;
+    ride.pickupLat =
+      dto.pickupLat;
 
-    ride.destinationLat = dto.destinationLat;
-    ride.destinationLng = dto.destinationLng;
+    ride.pickupLng =
+      dto.pickupLng;
 
-    ride.estimatedDistanceKm = estimatedDistanceKm;
+    ride.destinationLat =
+      dto.destinationLat;
+
+    ride.destinationLng =
+      dto.destinationLng;
+
+    ride.estimatedDistanceKm =
+      estimatedDistanceKm;
+
     ride.estimatedDurationMinutes =
       estimatedDurationMinutes;
-    ride.estimatedFare = estimatedFare;
 
-    ride.status = RideStatus.SEARCHING;
+    ride.estimatedFare =
+      estimatedFare;
+
+    ride.status =
+      RideStatus.SEARCHING;
 
     this.em.persist(ride);
 
     await this.em.flush();
 
-    await this.rideMatchingQueue.addMatchingJob(
-  
-    );
+    await this.rideMatchingQueue.addMatchingJob();
 
     return ride;
   }
@@ -91,9 +115,13 @@ export class RidesService {
   async getRideForRealtime(
     rideId: string,
   ): Promise<Ride> {
-    const ride = await this.em.findOne(Ride, {
-      id: rideId,
-    });
+    const ride =
+      await this.em.findOne(
+        Ride,
+        {
+          id: rideId,
+        },
+      );
 
     if (!ride) {
       throw new NotFoundException(
@@ -111,145 +139,216 @@ export class RidesService {
     ride: Ride;
     offer: RideOffer;
     previousStatus: RideStatus;
-    route: {
-      distance: number;
-      duration: number;
-      geometry: {
-        type: 'LineString';
-        coordinates: number[][];
-      };
-    };
+    driverToPickupRoute: RideRoute;
+    pickupToDestinationRoute: RideRoute;
   }> {
-    const em = this.em.fork();
+    const em =
+      this.em.fork();
 
-    const result = await em.transactional(
-      async (tx) => {
-        const driver = await tx.findOne(
-          Driver,
-          {
-            id: driverId,
-            deletedAt: null,
-          },
-        );
+    const result =
+      await em.transactional(
+        async (tx) => {
+          const driver =
+            await tx.findOne(
+              Driver,
+              {
+                id: driverId,
+                deletedAt: null,
+              },
+            );
 
-        if (!driver) {
-          throw new NotFoundException(
-            'Driver not found',
-          );
-        }
+          if (!driver) {
+            throw new NotFoundException(
+              'Driver not found',
+            );
+          }
 
-        if (
-          driver.status !== DriverStatus.AVAILABLE
-        ) {
-          throw new BadRequestException(
-            'Driver is not available',
-          );
-        }
+          if (
+            driver.status !==
+            DriverStatus.AVAILABLE
+          ) {
+            throw new BadRequestException(
+              'Driver is not available',
+            );
+          }
 
-        const offer = await tx.findOne(
-          RideOffer,
-          {
-            id: dto.offerId,
-            driver: driverId,
-            ride: dto.rideId,
-          },
-          {
-            populate: ['ride'],
-          },
-        );
+          const offer =
+            await tx.findOne(
+              RideOffer,
+              {
+                id: dto.offerId,
+                driver: driverId,
+                ride: dto.rideId,
+              },
+              {
+                populate: ['ride'],
+              },
+            );
 
-        if (!offer) {
-          throw new NotFoundException(
-            'Ride offer not found',
-          );
-        }
+          if (!offer) {
+            throw new NotFoundException(
+              'Ride offer not found',
+            );
+          }
 
-        if (
-          offer.status !== OfferStatus.PENDING
-        ) {
-          throw new BadRequestException(
-            `Offer is already ${offer.status}`,
-          );
-        }
+          if (
+            offer.status !==
+            OfferStatus.PENDING
+          ) {
+            throw new BadRequestException(
+              `Offer is already ${offer.status}`,
+            );
+          }
 
-        if (offer.expiresAt <= new Date()) {
-          offer.status = OfferStatus.EXPIRED;
+          if (
+            offer.expiresAt <=
+            new Date()
+          ) {
+            offer.status =
+              OfferStatus.EXPIRED;
+
+            await tx.flush();
+
+            throw new BadRequestException(
+              'Ride offer has expired',
+            );
+          }
+
+          const ride =
+            await tx.findOne(
+              Ride,
+              {
+                id: dto.rideId,
+              },
+            );
+
+          if (!ride) {
+            throw new NotFoundException(
+              'Ride not found',
+            );
+          }
+
+          if (
+            ride.status !==
+            RideStatus.SEARCHING
+          ) {
+            throw new BadRequestException(
+              'Ride is no longer available',
+            );
+          }
+
+          if (
+            ride.driverId !== null
+          ) {
+            throw new BadRequestException(
+              'Ride is already assigned to a driver',
+            );
+          }
+
+          const previousStatus =
+            ride.status;
+
+          offer.status =
+            OfferStatus.ACCEPTED;
+
+          ride.driverId =
+            driver.id;
+
+          ride.status =
+            RideStatus.ACCEPTED;
+
+          driver.status =
+            DriverStatus.BUSY;
+
+          driver.updatedAt =
+            new Date();
 
           await tx.flush();
 
-          throw new BadRequestException(
-            'Ride offer has expired',
-          );
-        }
-
-        const ride = await tx.findOne(Ride, {
-          id: dto.rideId,
-        });
-
-        if (!ride) {
-          throw new NotFoundException(
-            'Ride not found',
-          );
-        }
-
-        if (
-          ride.status !== RideStatus.SEARCHING
-        ) {
-          throw new BadRequestException(
-            'Ride is no longer available',
-          );
-        }
-
-        if (ride.driverId !== null) {
-          throw new BadRequestException(
-            'Ride is already assigned to a driver',
-          );
-        }
-
-        const previousStatus = ride.status;
-
-        offer.status = OfferStatus.ACCEPTED;
-
-        ride.driverId = driver.id;
-        ride.status = RideStatus.ACCEPTED;
-
-        driver.status = DriverStatus.BUSY;
-        driver.updatedAt = new Date();
-
-        await tx.flush();
-
-        return {
-          ride,
-          offer,
-          previousStatus,
-        };
-      },
-    );
-
-    const route =
-      await this.routingService.getRideRoute(
-        {
-          latitude: result.ride.pickupLat,
-          longitude: result.ride.pickupLng,
-        },
-        {
-          latitude:
-            result.ride.destinationLat,
-          longitude:
-            result.ride.destinationLng,
+          return {
+            ride,
+            offer,
+            previousStatus,
+            driver,
+          };
         },
       );
 
+    /*
+     * Driver location is stored in the
+     * Driver entity as a PostGIS geography
+     * Point in the `location` field.
+     */
+    const driverCoordinates =
+      this.parseDriverLocation(
+        result.driver.location,
+      );
+
+    /*
+     * Route 1:
+     *
+     * Driver current location
+     *        ↓
+     * Pickup
+     */
+    const driverToPickupRoute =
+      await this.routingService
+        .getDriverToPickupRoute(
+          {
+            latitude:
+              driverCoordinates.latitude,
+
+            longitude:
+              driverCoordinates.longitude,
+          },
+          {
+            latitude:
+              result.ride.pickupLat,
+
+            longitude:
+              result.ride.pickupLng,
+          },
+        );
+
+    /*
+     * Route 2:
+     *
+     * Pickup
+     *    ↓
+     * Destination
+     */
+    const pickupToDestinationRoute =
+      await this.routingService
+        .getRideRoute(
+          {
+            latitude:
+              result.ride.pickupLat,
+
+            longitude:
+              result.ride.pickupLng,
+          },
+          {
+            latitude:
+              result.ride.destinationLat,
+
+            longitude:
+              result.ride.destinationLng,
+          },
+        );
+
     return {
-      ride: result.ride,
-      offer: result.offer,
+      ride:
+        result.ride,
+
+      offer:
+        result.offer,
+
       previousStatus:
         result.previousStatus,
-      route: {
-        distance: route.distance,
-        duration: route.duration,
-        geometry: route.geometry!,
-      },
+
+      driverToPickupRoute,
+
+      pickupToDestinationRoute,
     };
   }
 
@@ -258,14 +357,15 @@ export class RidesService {
     offerId: string,
     driverId: string,
   ): Promise<RideOffer> {
-    const offer = await this.em.findOne(
-      RideOffer,
-      {
-        id: offerId,
-        driver: driverId,
-        ride: rideId,
-      },
-    );
+    const offer =
+      await this.em.findOne(
+        RideOffer,
+        {
+          id: offerId,
+          driver: driverId,
+          ride: rideId,
+        },
+      );
 
     if (!offer) {
       throw new NotFoundException(
@@ -274,15 +374,20 @@ export class RidesService {
     }
 
     if (
-      offer.status !== OfferStatus.PENDING
+      offer.status !==
+      OfferStatus.PENDING
     ) {
       throw new BadRequestException(
         `Offer is already ${offer.status}`,
       );
     }
 
-    if (offer.expiresAt <= new Date()) {
-      offer.status = OfferStatus.EXPIRED;
+    if (
+      offer.expiresAt <=
+      new Date()
+    ) {
+      offer.status =
+        OfferStatus.EXPIRED;
 
       await this.em.flush();
 
@@ -291,19 +396,128 @@ export class RidesService {
       );
     }
 
-    offer.status = OfferStatus.REJECTED;
+    offer.status =
+      OfferStatus.REJECTED;
 
     await this.em.flush();
 
     return offer;
   }
 
+  private parseDriverLocation(
+    location: string | null,
+  ): DriverCoordinates {
+    if (!location) {
+      throw new BadRequestException(
+        'Driver location is not available',
+      );
+    }
+
+    /*
+     * Expected PostGIS representation:
+     *
+     * POINT(longitude latitude)
+     *
+     * Example:
+     *
+     * POINT(69.2075 34.5553)
+     *
+     * PostGIS uses:
+     *
+     * X = longitude
+     * Y = latitude
+     */
+
+    const pointMatch =
+      location.match(
+        /POINT\s*\(\s*([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s*\)/i,
+      );
+
+    if (pointMatch) {
+      const longitude =
+        Number(pointMatch[1]);
+
+      const latitude =
+        Number(pointMatch[2]);
+
+      if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude)
+      ) {
+        throw new BadRequestException(
+          'Driver location contains invalid coordinates',
+        );
+      }
+
+      if (
+        latitude < -90 ||
+        latitude > 90
+      ) {
+        throw new BadRequestException(
+          'Driver location contains invalid latitude',
+        );
+      }
+
+      if (
+        longitude < -180 ||
+        longitude > 180
+      ) {
+        throw new BadRequestException(
+          'Driver location contains invalid longitude',
+        );
+      }
+
+      return {
+        latitude,
+        longitude,
+      };
+    }
+
+    /*
+     * Also support EWKT:
+     *
+     * SRID=4326;POINT(longitude latitude)
+     */
+    const ewktMatch =
+      location.match(
+        /SRID=\d+;\s*POINT\s*\(\s*([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s*\)/i,
+      );
+
+    if (ewktMatch) {
+      const longitude =
+        Number(ewktMatch[1]);
+
+      const latitude =
+        Number(ewktMatch[2]);
+
+      if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude)
+      ) {
+        throw new BadRequestException(
+          'Driver location contains invalid coordinates',
+        );
+      }
+
+      return {
+        latitude,
+        longitude,
+      };
+    }
+
+    throw new BadRequestException(
+      'Driver location has an unsupported format',
+    );
+  }
+
   private validateLocations(
     dto: CreateRideDto,
   ): void {
     if (
-      dto.pickupLat === dto.destinationLat &&
-      dto.pickupLng === dto.destinationLng
+      dto.pickupLat ===
+        dto.destinationLat &&
+      dto.pickupLng ===
+        dto.destinationLng
     ) {
       throw new BadRequestException(
         'Pickup and destination cannot be the same',
@@ -314,31 +528,40 @@ export class RidesService {
   private calculateDistanceKm(
     dto: CreateRideDto,
   ): number {
-    const earthRadiusKm = 6371;
+    const earthRadiusKm =
+      6371;
 
-    const lat1 = this.toRadians(
-      dto.pickupLat,
-    );
-
-    const lat2 = this.toRadians(
-      dto.destinationLat,
-    );
-
-    const deltaLat = this.toRadians(
-      dto.destinationLat -
+    const lat1 =
+      this.toRadians(
         dto.pickupLat,
-    );
+      );
 
-    const deltaLng = this.toRadians(
-      dto.destinationLng -
-        dto.pickupLng,
-    );
+    const lat2 =
+      this.toRadians(
+        dto.destinationLat,
+      );
+
+    const deltaLat =
+      this.toRadians(
+        dto.destinationLat -
+          dto.pickupLat,
+      );
+
+    const deltaLng =
+      this.toRadians(
+        dto.destinationLng -
+          dto.pickupLng,
+      );
 
     const a =
-      Math.sin(deltaLat / 2) ** 2 +
+      Math.sin(
+        deltaLat / 2,
+      ) ** 2 +
       Math.cos(lat1) *
         Math.cos(lat2) *
-        Math.sin(deltaLng / 2) ** 2;
+        Math.sin(
+          deltaLng / 2,
+        ) ** 2;
 
     const c =
       2 *
@@ -363,7 +586,8 @@ export class RidesService {
     value: number,
   ): number {
     return (
-      (value * Math.PI) / 180
+      (value * Math.PI) /
+      180
     );
   }
 }
