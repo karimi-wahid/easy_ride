@@ -1,4 +1,4 @@
-import {Entity,PrimaryKey,Property,Enum,} from '@mikro-orm/decorators/legacy';
+import { Entity,  PrimaryKey, Property,Enum,} from '@mikro-orm/decorators/legacy';
 import { randomUUID } from 'crypto';
 import { RideStatus } from '../../shared/types/ride-status.enum';
 
@@ -11,11 +11,13 @@ export class Ride {
   })
   id: string = randomUUID();
 
+
   @Property({
     fieldName: 'user_id',
     type: 'uuid',
   })
   userId!: string;
+
 
   @Property({
     fieldName: 'driver_id',
@@ -24,11 +26,13 @@ export class Ride {
   })
   driverId: string | null = null;
 
+
   @Property({
     fieldName: 'pickup_lat',
     type: 'number',
   })
   pickupLat!: number;
+
 
   @Property({
     fieldName: 'pickup_lng',
@@ -36,17 +40,20 @@ export class Ride {
   })
   pickupLng!: number;
 
+
   @Property({
     fieldName: 'destination_lat',
     type: 'number',
   })
   destinationLat!: number;
 
+
   @Property({
     fieldName: 'destination_lng',
     type: 'number',
   })
   destinationLng!: number;
+
 
   @Property({
     fieldName: 'pickup_location',
@@ -55,12 +62,14 @@ export class Ride {
   })
   pickupLocation: string | null = null;
 
+
   @Property({
     fieldName: 'destination_location',
     columnType: 'geography(Point,4326)',
     nullable: true,
   })
   destinationLocation: string | null = null;
+
 
   @Property({
     fieldName: 'estimated_distance_km',
@@ -69,12 +78,14 @@ export class Ride {
   })
   estimatedDistanceKm: number | null = null;
 
+
   @Property({
     fieldName: 'estimated_duration_minutes',
     type: 'number',
     nullable: true,
   })
   estimatedDurationMinutes: number | null = null;
+
 
   @Property({
     fieldName: 'estimated_fare',
@@ -83,11 +94,29 @@ export class Ride {
   })
   estimatedFare: number | null = null;
 
+
   @Enum({
     items: () => RideStatus,
     fieldName: 'status',
   })
   status: RideStatus = RideStatus.SEARCHING;
+
+
+  @Property({
+    fieldName: 'search_started_at',
+    type: 'datetime',
+    nullable: true,
+  })
+  searchStartedAt: Date | null = null;
+
+
+  @Property({
+    fieldName: 'search_expires_at',
+    type: 'datetime',
+    nullable: true,
+  })
+  searchExpiresAt: Date | null = null;
+
 
   @Property({
     fieldName: 'created_at',
@@ -95,6 +124,7 @@ export class Ride {
   })
   createdAt: Date = new Date();
 
+  
   @Property({
     fieldName: 'updated_at',
     type: 'datetime',

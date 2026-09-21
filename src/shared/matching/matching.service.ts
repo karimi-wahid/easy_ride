@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
+
 import {
   EntityManager,
 } from '@mikro-orm/postgresql';
@@ -52,35 +53,6 @@ export class MatchingService {
       RoutingService,
   ) {}
 
-  async findSearchingRides():
-    Promise<Ride[]> {
-    const em =
-      this.em.fork();
-
-    const rides =
-      await em.find(
-        Ride,
-        {
-          status:
-            RideStatus.SEARCHING,
-
-          driverId: null,
-        },
-        {
-          orderBy: {
-            createdAt: 'ASC',
-          },
-        },
-      );
-
-    this.logger.debug(
-      `SEARCHING RIDES FOUND | ` +
-        `count=${rides.length}`,
-    );
-
-    return rides;
-  }
-
   async getMatchingState(
     rideId: string,
   ): Promise<{
@@ -125,6 +97,47 @@ export class MatchingService {
     };
   }
 
+  async getRideMatchingTiming(
+    rideId: string,
+  ): Promise<{
+    searchStartedAt: Date | null;
+    searchExpiresAt: Date | null;
+  }> {
+    const em =
+      this.em.fork();
+
+    const ride =
+      await em.findOne(
+        Ride,
+        {
+          id: rideId,
+        },
+        {
+          fields: [
+            'id',
+            'searchStartedAt',
+            'searchExpiresAt',
+          ],
+        },
+      );
+
+    if (!ride) {
+      return {
+        searchStartedAt: null,
+        searchExpiresAt: null,
+      };
+    }
+
+    return {
+      searchStartedAt:
+        ride.searchStartedAt,
+
+      searchExpiresAt:
+        ride.searchExpiresAt,
+    };
+  }
+
+
   async findNearbyDrivers(
     rideId: string,
     radiusMeters = 3000,
@@ -132,6 +145,7 @@ export class MatchingService {
     const em =
       this.em.fork();
 
+  
     const ride =
       await em.findOne(
         Ride,
@@ -225,7 +239,9 @@ export class MatchingService {
           ],
         );
 
-    if (candidates.length === 0) {
+    if (
+      candidates.length === 0
+    ) {
       this.logger.debug(
         `NO NEARBY DRIVERS | ` +
           `rideId=${ride.id}`,
@@ -274,6 +290,7 @@ export class MatchingService {
         ),
       );
 
+    
     const matchedDrivers =
       await Promise.all(
         candidates.map(
@@ -365,6 +382,7 @@ export class MatchingService {
         ),
       );
 
+   
     const validMatches =
       matchedDrivers.filter(
         (

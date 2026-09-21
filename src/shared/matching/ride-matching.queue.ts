@@ -1,83 +1,183 @@
-import {Injectable,} from '@nestjs/common';
-import { InjectQueue,} from '@nestjs/bullmq';
-import {Queue,} from 'bullmq';
+import { Injectable } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
-export const RIDE_MATCHING_QUEUE ='ride-matching';
-export const RIDE_MATCHING_JOB ='find-searching-rides';
-export const RIDE_OFFER_TIMEOUT_JOB ='ride-offer-timeout';
+export const RIDE_MATCHING_QUEUE = 'ride-matching';
+export const RIDE_MATCHING_JOB = 'find-searching-rides';
+export const RIDE_OFFER_TIMEOUT_JOB = 'ride-offer-timeout';
 
-export interface RideMatchingJobData {scan: true;}
-export interface RideOfferTimeoutJobData { rideId: string; offerId: string;}
+export const RIDE_MATCHING_WINDOW_MS = 30_000;
+
+export interface RideMatchingJobData {
+  rideId: string;
+  matchingStartedAt: number;
+}
+
+export interface RideOfferTimeoutJobData {
+  rideId: string;
+  offerId: string;
+}
 
 @Injectable()
 export class RideMatchingQueue {
-
   constructor(
     @InjectQueue(RIDE_MATCHING_QUEUE)
     private readonly queue: Queue,
   ) {}
 
+  
+  async addMatchingJob(
+    rideId: string,
+    delayMs = 0,
+    matchingStartedAt = Date.now(),
+  ): Promise<void> {
+    const jobId =
+      `ride-matching-${rideId}-${matchingStartedAt}-${Date.now()}`;
 
-  async addMatchingJob(  delayMs = 0,  ): Promise<void> {
-    const jobId =  `ride-matching-scan-${Date.now()}`;
-    await this.queue.add( RIDE_MATCHING_JOB,
+    await this.queue.add(
+      RIDE_MATCHING_JOB,
       {
-        scan: true,
+        rideId,
+        matchingStartedAt,
       } satisfies RideMatchingJobData,
       {
         jobId,
-        delay: Math.max(0,delayMs,),
-        attempts: 3,
-        backoff: { type: 'exponential',  delay: 1000,},
+
+        delay: Math.max(
+          0,
+          delayMs,
+        ),
+
+       
+        attempts: 1,
+
         removeOnComplete: true,
-        removeOnFail: {age: 60,count: 100,  },
+
+        removeOnFail: {
+          age: 60,
+          count: 100,
+        },
       },
     );
-  }
-
-
-  async scheduleOfferTimeout(rideId: string,offerId: string,delayMs = 10_000,): Promise<void> {
-    const jobId = `ride-offer-timeout-${offerId}`;
-    const existing = await this.queue.getJob(jobId);
-
-    if (existing) {
-      const state =  await existing.getState();
-      if (  state === 'waiting' ||  state === 'delayed' ||  state === 'active') {
-        return;
-      }
-      try {
-        await existing.remove();
-      } catch {
-      }
-    }
-    await this.queue.add(RIDE_OFFER_TIMEOUT_JOB,
-      { rideId,offerId,} satisfies RideOfferTimeoutJobData,
-      {
-        jobId,
-        delay: Math.max( 0, delayMs,   ),
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 1000,  },
-        removeOnComplete: true,
-        removeOnFail: { age: 60, count: 100, },
-      },
-    );
-  }
-
-
-  async removeMatchingJob(): Promise<void> {
-    return;
   }
 
   
-  async removeOfferTimeout( offerId: string,): Promise<void> {
-    const jobId =   `ride-offer-timeout-${offerId}`;
-    const job = await this.queue.getJob(jobId);
+  async scheduleOfferTimeout(
+    rideId: string,
+    offerId: string,
+    delayMs = 10_000,
+  ): Promise<void> {
+    const jobId =
+      `ride-offer-timeout-${offerId}`;
+
+    const existing =
+      await this.queue.getJob(jobId);
+
+    if (existing) {
+      const state =
+        await existing.getState();
+
+      if (
+        state === 'waiting' ||
+        state === 'delayed' ||
+        state === 'active'
+      ) {
+        return;
+      }
+
+      try {
+        await existing.remove();
+      } catch {
+      
+      }
+    }
+
+    await this.queue.add(
+      RIDE_OFFER_TIMEOUT_JOB,
+      {
+        rideId,
+        offerId,
+      } satisfies RideOfferTimeoutJobData,
+      {
+        jobId,
+
+        delay: Math.max(
+          0,
+          delayMs,
+        ),
+
+        attempts: 3,
+
+        backoff: {
+          type: 'exponential',
+          delay: 1000,
+        },
+
+        removeOnComplete: true,
+
+        removeOnFail: {
+          age: 60,
+          count: 100,
+        },
+      },
+    );
+  }
+
+  
+  async removeMatchingJob(
+    rideId: string,
+  ): Promise<void> {
+    const jobs =
+      await this.queue.getJobs([
+        'waiting',
+        'delayed',
+        'active',
+      ]);
+
+    const rideJobPrefix =
+      `ride-matching-${rideId}-`;
+
+    for (const job of jobs) {
+      if (
+        job.name !== RIDE_MATCHING_JOB
+      ) {
+        continue;
+      }
+
+      if (
+        !job.id?.startsWith(
+          rideJobPrefix,
+        )
+      ) {
+        continue;
+      }
+
+      try {
+        await job.remove();
+      } catch {
+    
+      }
+    }
+  }
+
+  
+  async removeOfferTimeout(
+    offerId: string,
+  ): Promise<void> {
+    const jobId =
+      `ride-offer-timeout-${offerId}`;
+
+    const job =
+      await this.queue.getJob(jobId);
+
     if (!job) {
       return;
     }
+
     try {
       await job.remove();
     } catch {
+     
     }
   }
 }

@@ -10,6 +10,7 @@ import {
 import { Ride } from '../../database/entities/ride.entity';
 import { Driver } from '../../database/entities/driver.entity';
 import { RideOffer } from '../../database/entities/ride-driver-offer.entity';
+import { LockMode } from '@mikro-orm/core';
 
 import {
   DriverStatus,
@@ -72,6 +73,20 @@ export class RideOfferService {
         return null;
       }
 
+    
+      if (
+        ride.searchExpiresAt &&
+        ride.searchExpiresAt.getTime() <=
+          Date.now()
+      ) {
+        this.logger.debug(
+          `RIDE SEARCH WINDOW EXPIRED | ` +
+            `rideId=${rideId}`,
+        );
+
+        return null;
+      }
+
       const currentDriver =
         await em.findOne(
           Driver,
@@ -104,6 +119,27 @@ export class RideOfferService {
             expirationSeconds *
               1000,
         );
+
+   
+      const finalExpiresAt =
+        ride.searchExpiresAt &&
+        ride.searchExpiresAt <
+          expiresAt
+          ? ride.searchExpiresAt
+          : expiresAt;
+
+      
+      if (
+        finalExpiresAt.getTime() <=
+        now.getTime()
+      ) {
+        this.logger.debug(
+          `RIDE SEARCH WINDOW ALREADY EXPIRED | ` +
+            `rideId=${rideId}`,
+        );
+
+        return null;
+      }
 
       const existingOffer =
         await em.findOne(
@@ -197,15 +233,18 @@ export class RideOfferService {
             OfferStatus.PENDING;
 
           existingOffer.expiresAt =
-            expiresAt;
+            finalExpiresAt;
 
           await em.flush();
 
           await this.scheduleExpiration(
             rideId,
             existingOffer.id,
-            expirationSeconds *
-              1000,
+            Math.max(
+              0,
+              finalExpiresAt.getTime() -
+                Date.now(),
+            ),
           );
 
           this.logger.log(
@@ -214,7 +253,7 @@ export class RideOfferService {
               `driverId=${currentDriver.id} | ` +
               `offerId=${existingOffer.id} | ` +
               `previousStatus=${previousStatus} | ` +
-              `expiresAt=${expiresAt.toISOString()}`,
+              `expiresAt=${finalExpiresAt.toISOString()}`,
           );
 
           return existingOffer;
@@ -243,9 +282,11 @@ export class RideOfferService {
             status:
               OfferStatus.PENDING,
 
-            expiresAt,
+            expiresAt:
+              finalExpiresAt,
 
-            createdAt: now,
+            createdAt:
+              now,
           },
         );
 
@@ -256,8 +297,11 @@ export class RideOfferService {
       await this.scheduleExpiration(
         rideId,
         offer.id,
-        expirationSeconds *
-          1000,
+        Math.max(
+          0,
+          finalExpiresAt.getTime() -
+            Date.now(),
+        ),
       );
 
       this.logger.log(
@@ -265,7 +309,7 @@ export class RideOfferService {
           `rideId=${rideId} | ` +
           `driverId=${currentDriver.id} | ` +
           `offerId=${offer.id} | ` +
-          `expiresAt=${expiresAt.toISOString()}`,
+          `expiresAt=${finalExpiresAt.toISOString()}`,
       );
 
       return offer;
@@ -461,84 +505,59 @@ export class RideOfferService {
     return expired !== null;
   }
 
-  async acceptOffer(
-    rideId: string,
-    offerId: string,
-    driverId: string,
-  ): Promise<boolean> {
-    const em =
-      this.em.fork();
 
-    const now =
-      new Date();
-
-    const ride =
-      await em.findOne(
-        Ride,
-        {
-          id: rideId,
-
-          status:
-            RideStatus.SEARCHING,
-
-          driverId: null,
-        },
-      );
-
-    if (!ride) {
-      this.logger.debug(
-        `RIDE NOT AVAILABLE FOR OFFER | ` +
-          `rideId=${rideId}`,
-      );
-
-      return false;
-    }
-
-    const affected =
-      await em.nativeUpdate(
-        RideOffer,
-        {
-          id: offerId,
-
-          ride: rideId,
-
-          driver: driverId,
-
-          status:
-            OfferStatus.PENDING,
-
-          expiresAt: {
-            $gt: now,
-          },
-        },
-        {
-          status:
-            OfferStatus.ACCEPTED,
-        },
-      );
-
-    if (affected === 0) {
-      this.logger.debug(
-        `OFFER COULD NOT BE ACCEPTED | ` +
-          `rideId=${rideId} | ` +
-          `offerId=${offerId} | ` +
-          `driverId=${driverId}`,
-      );
-
-      return false;
-    }
-
-    await em.flush();
-
-    this.logger.log(
-      `OFFER ACCEPTED | ` +
-        `rideId=${rideId} | ` +
-        `offerId=${offerId} | ` +
-        `driverId=${driverId}`,
+async acceptOffer( rideId: string, offerId: string, driverId: string,): Promise<boolean> {
+  const em = this.em.fork();
+  const now = new Date();
+  return em.transactional(async (tx) => {
+    const ride = await tx.findOne(
+      Ride,
+      { id: rideId },
+      { lockMode: LockMode.PESSIMISTIC_WRITE },
     );
 
+    if (!ride) {
+      this.logger.debug(`RIDE NOT AVAILABLE FOR OFFER | rideId=${rideId}`);
+      return false;
+    }
+
+    if (   ride.status !== RideStatus.SEARCHING ||   ride.driverId !== null ) {
+      this.logger.debug(`RIDE NOT AVAILABLE FOR OFFER | rideId=${rideId}`);
+      return false;
+    }
+
+    if ( ride.searchExpiresAt && ride.searchExpiresAt.getTime() <= now.getTime() ) {
+      this.logger.debug(   `RIDE SEARCH WINDOW EXPIRED | rideId=${rideId} | offerId=${offerId}`, );
+      return false;
+    }
+
+    const affected = await tx.nativeUpdate(
+      RideOffer,
+      {
+        id: offerId,
+        ride: rideId,
+        driver: driverId,
+        status: OfferStatus.PENDING,
+        expiresAt: { $gt: now },
+      },
+      { status: OfferStatus.ACCEPTED },
+    );
+
+    if (affected === 0) {
+      this.logger.debug(  `OFFER COULD NOT BE ACCEPTED | rideId=${rideId} | offerId=${offerId} | driverId=${driverId}`,  );
+      return false;
+    }
+
+    ride.status = RideStatus.ACCEPTED;
+    ride.driverId = driverId;
+    ride.searchStartedAt = now;
+
+    await tx.flush();
+    this.logger.log(   `OFFER ACCEPTED | rideId=${rideId} | offerId=${offerId} | driverId=${driverId}`, );
     return true;
-  }
+  });
+}
+
 
   async rejectOffer(
     rideId: string,
@@ -604,7 +623,7 @@ export class RideOfferService {
 
       return null;
     }
-
+ 
     this.logger.log(
       `OFFER REJECTED | ` +
         `rideId=${rideId} | ` +
