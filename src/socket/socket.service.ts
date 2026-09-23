@@ -323,14 +323,33 @@ export class RealtimeService {
     const room =
       SOCKET_ROOMS.ride(rideId);
 
-    await socket.join(room);
+    try {
+      this.logger.debug(
+        `JOIN RIDE START | ` +
+          `socket=${socket.id} | ` +
+          `rideId=${rideId} | ` +
+          `room=${room}`,
+      );
 
-    this.logger.log(
-      `SOCKET JOINED RIDE | ` +
-        `socket=${socket.id} | ` +
-        `rideId=${rideId} | ` +
-        `room=${room}`,
-    );
+      await socket.join(room);
+
+      this.logger.log(
+        `SOCKET JOINED RIDE | ` +
+          `socket=${socket.id} | ` +
+          `rideId=${rideId} | ` +
+          `room=${room}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `FAILED TO JOIN RIDE ROOM | ` +
+          `socket=${socket.id} | ` +
+          `rideId=${rideId} | ` +
+          `room=${room} | ` +
+          `error=${this.getErrorMessage(error)}`,
+      );
+
+      throw error;
+    }
   }
 
   async leaveRide(
@@ -340,14 +359,26 @@ export class RealtimeService {
     const room =
       SOCKET_ROOMS.ride(rideId);
 
-    await socket.leave(room);
+    try {
+      await socket.leave(room);
 
-    this.logger.log(
-      `SOCKET LEFT RIDE | ` +
-        `socket=${socket.id} | ` +
-        `rideId=${rideId} | ` +
-        `room=${room}`,
-    );
+      this.logger.log(
+        `SOCKET LEFT RIDE | ` +
+          `socket=${socket.id} | ` +
+          `rideId=${rideId} | ` +
+          `room=${room}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `FAILED TO LEAVE RIDE ROOM | ` +
+          `socket=${socket.id} | ` +
+          `rideId=${rideId} | ` +
+          `room=${room} | ` +
+          `error=${this.getErrorMessage(error)}`,
+      );
+
+      throw error;
+    }
   }
 
   async joinDriver(
@@ -357,14 +388,26 @@ export class RealtimeService {
     const room =
       SOCKET_ROOMS.driver(driverId);
 
-    await socket.join(room);
+    try {
+      await socket.join(room);
 
-    this.logger.log(
-      `DRIVER ROOM JOINED | ` +
-        `socket=${socket.id} | ` +
-        `driverId=${driverId} | ` +
-        `room=${room}`,
-    );
+      this.logger.log(
+        `DRIVER ROOM JOINED | ` +
+          `socket=${socket.id} | ` +
+          `driverId=${driverId} | ` +
+          `room=${room}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `FAILED TO JOIN DRIVER ROOM | ` +
+          `socket=${socket.id} | ` +
+          `driverId=${driverId} | ` +
+          `room=${room} | ` +
+          `error=${this.getErrorMessage(error)}`,
+      );
+
+      throw error;
+    }
   }
 
   async joinUser(
@@ -374,14 +417,26 @@ export class RealtimeService {
     const room =
       SOCKET_ROOMS.user(userId);
 
-    await socket.join(room);
+    try {
+      await socket.join(room);
 
-    this.logger.log(
-      `USER ROOM JOINED | ` +
-        `socket=${socket.id} | ` +
-        `userId=${userId} | ` +
-        `room=${room}`,
-    );
+      this.logger.log(
+        `USER ROOM JOINED | ` +
+          `socket=${socket.id} | ` +
+          `userId=${userId} | ` +
+          `room=${room}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `FAILED TO JOIN USER ROOM | ` +
+          `socket=${socket.id} | ` +
+          `userId=${userId} | ` +
+          `room=${room} | ` +
+          `error=${this.getErrorMessage(error)}`,
+      );
+
+      throw error;
+    }
   }
 
   isDriverConnected(
@@ -453,5 +508,15 @@ export class RealtimeService {
         'Realtime /rides namespace is not initialized',
       );
     }
+  }
+
+  private getErrorMessage(
+    error: unknown,
+  ): string {
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return String(error);
   }
 }

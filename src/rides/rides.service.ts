@@ -1,15 +1,30 @@
-import {BadRequestException,Injectable, NotFoundException,} from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/postgresql';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+
+import {
+  EntityManager,
+} from '@mikro-orm/postgresql';
+
 import { Ride } from '../database/entities/ride.entity';
 import { Driver } from '../database/entities/driver.entity';
 import { RideOffer } from '../database/entities/ride-driver-offer.entity';
+
 import { RideStatus } from '../shared/types/ride-status.enum';
 import { DriverStatus } from '../shared/types/driver-status.enum';
 import { OfferStatus } from '../shared/types/offer-status.enum';
+
 import { CreateRideDto } from './dto/create-ride.dto';
 import { AcceptRideDto } from '../socket/dto/accept-ride.dto';
+
 import { RideMatchingQueue } from '../shared/matching/ride-matching.queue';
-import { RoutingService, RideRoute,} from 'src/routing/routing.service';
+
+import {
+  RoutingService,
+  RideRoute,
+} from 'src/routing/routing.service';
 
 interface DriverCoordinates {
   latitude: number;
@@ -18,48 +33,128 @@ interface DriverCoordinates {
 
 @Injectable()
 export class RidesService {
-  private readonly MATCHING_WINDOW_MS =30_000;
+  private readonly MATCHING_WINDOW_MS =
+    30_000;
 
   constructor(
     private readonly em: EntityManager,
-    private readonly rideMatchingQueue:  RideMatchingQueue,
-    private readonly routingService: RoutingService,
+
+    private readonly rideMatchingQueue:
+      RideMatchingQueue,
+
+    private readonly routingService:
+      RoutingService,
   ) {}
 
-  
-  async createRide( userId: string, dto: CreateRideDto,  ): Promise<Ride> {
+  async createRide(
+    userId: string,
+    dto: CreateRideDto,
+  ): Promise<Ride> {
     this.validateLocations(dto);
-    const distanceKm = this.calculateDistanceKm(dto);
-    const estimatedDistanceKm =  Number(    (distanceKm * 1.25).toFixed(2),  );
-    const averageSpeedKmh = 25;
-    const estimatedDurationMinutes =  Math.max( 1, Math.ceil(   (estimatedDistanceKm /     averageSpeedKmh) *     60, ),);
-    const estimatedFare = Math.round(   estimatedDistanceKm *     (100 / 6), );
-    const searchStartedAt = new Date();
-    const searchExpiresAt =  new Date(  searchStartedAt.getTime() +     this.MATCHING_WINDOW_MS, );
-    const ride =  new Ride();
 
-    ride.userId = userId;
-    ride.driverId = null;
-    ride.pickupLat = dto.pickupLat;
-    ride.pickupLng =  dto.pickupLng;
-    ride.destinationLat = dto.destinationLat;
-    ride.destinationLng =  dto.destinationLng;
-    ride.estimatedDistanceKm =  estimatedDistanceKm;
-    ride.estimatedDurationMinutes =  estimatedDurationMinutes;
-    ride.estimatedFare = estimatedFare;
-    ride.status =  RideStatus.SEARCHING;
-    ride.searchStartedAt = searchStartedAt;
-    ride.searchExpiresAt =  searchExpiresAt;
-    this.em.persist(   ride, );
-   
-    await this.em.flush();
-    await this.rideMatchingQueue .addMatchingJob(   ride.id, );
+    const distanceKm =
+      this.calculateDistanceKm(dto);
+
+    const estimatedDistanceKm =
+      Number(
+        (
+          distanceKm * 1.25
+        ).toFixed(2),
+      );
+
+    const averageSpeedKmh = 25;
+
+    const estimatedDurationMinutes =
+      Math.max(
+        1,
+        Math.ceil(
+          (
+            estimatedDistanceKm /
+            averageSpeedKmh
+          ) * 60,
+        ),
+      );
+
+    const estimatedFare =
+      Math.round(
+        estimatedDistanceKm *
+          (100 / 6),
+      );
+
+    const searchStartedAt =
+      new Date();
+
+    const searchExpiresAt =
+      new Date(
+        searchStartedAt.getTime() +
+          this.MATCHING_WINDOW_MS,
+      );
+
+    const em =
+      this.em.fork();
+
+    const ride =
+      new Ride();
+
+    ride.userId =
+      userId;
+
+    ride.driverId =
+      null;
+
+    ride.pickupLat =
+      dto.pickupLat;
+
+    ride.pickupLng =
+      dto.pickupLng;
+
+    ride.destinationLat =
+      dto.destinationLat;
+
+    ride.destinationLng =
+      dto.destinationLng;
+
+    ride.estimatedDistanceKm =
+      estimatedDistanceKm;
+
+    ride.estimatedDurationMinutes =
+      estimatedDurationMinutes;
+
+    ride.estimatedFare =
+      estimatedFare;
+
+    ride.status =
+      RideStatus.SEARCHING;
+
+    ride.searchStartedAt =
+      searchStartedAt;
+
+    ride.searchExpiresAt =
+      searchExpiresAt;
+
+    em.persist(
+      ride,
+    );
+
+    await em.flush();
+
+    await this.rideMatchingQueue
+      .addMatchingJob(
+        ride.id,
+      );
+
     return ride;
   }
 
+  async retryRide(
+    userId: string,
+    rideId: string,
+  ): Promise<Ride> {
+    const em =
+      this.em.fork();
 
-  async retryRide(  userId: string,  rideId: string, ): Promise<Ride> {
-    const ride = await this.em.findOne(
+    const ride =
+      await em.findOne(
         Ride,
         {
           id: rideId,
@@ -71,67 +166,123 @@ export class RidesService {
         'Ride not found',
       );
     }
-    if (ride.userId !==   userId ) {
+
+    if (
+      ride.userId !==
+      userId
+    ) {
       throw new BadRequestException(
         'You are not allowed to retry this ride',
       );
     }
-    if (ride.status !==  RideStatus.SEARCHING) {
+
+    if (
+      ride.status !==
+      RideStatus.SEARCHING
+    ) {
       throw new BadRequestException(
         'Ride is no longer available for retry',
       );
     }
-    if (ride.driverId !== null  ) {
+
+    if (
+      ride.driverId !==
+      null
+    ) {
       throw new BadRequestException(
         'Ride is already assigned to a driver',
       );
     }
 
-    const searchStartedAt = new Date();
-    const searchExpiresAt = new Date(   searchStartedAt.getTime() +     this.MATCHING_WINDOW_MS, );
-    ride.searchStartedAt =searchStartedAt;
-    ride.searchExpiresAt = searchExpiresAt;
-    ride.status =   RideStatus.SEARCHING;
+    const searchStartedAt =
+      new Date();
 
-    await this.em.flush();
-    await this.rideMatchingQueue.addMatchingJob(ride.id,);
+    const searchExpiresAt =
+      new Date(
+        searchStartedAt.getTime() +
+          this.MATCHING_WINDOW_MS,
+      );
+
+    ride.searchStartedAt =
+      searchStartedAt;
+
+    ride.searchExpiresAt =
+      searchExpiresAt;
+
+    ride.status =
+      RideStatus.SEARCHING;
+
+    await em.flush();
+
+    await this.rideMatchingQueue
+      .addMatchingJob(
+        ride.id,
+      );
+
     return ride;
   }
 
+  async getAvailableRides(): Promise<
+    Ride[]
+  > {
+    const em =
+      this.em.fork();
 
-  async getAvailableRides(): Promise<Ride[]> {
-    return this.em.find(
+    return em.find(
       Ride,
       {
-        status: RideStatus.SEARCHING,
-        driverId: null,
+        status:
+          RideStatus.SEARCHING,
+
+        driverId:
+          null,
       },
     );
   }
 
+  async getRideForRealtime(
+    rideId: string,
+  ): Promise<Ride> {
+    /*
+     * IMPORTANT:
+     *
+     * Socket.IO realtime requests do not
+     * automatically provide a MikroORM
+     * request context.
+     *
+     * Therefore always use a fork here.
+     */
+    const em =
+      this.em.fork();
 
-  async getRideForRealtime(  rideId: string, ): Promise<Ride> {
-    const ride =  await this.em.findOne(
+    const ride =
+      await em.findOne(
         Ride,
         {
           id: rideId,
         },
       );
+
     if (!ride) {
       throw new NotFoundException(
         'Ride not found',
       );
     }
+
     return ride;
   }
 
-
-  async getRideMatchingTiming( rideId: string, ): Promise<{
+  async getRideMatchingTiming(
+    rideId: string,
+  ): Promise<{
     searchStartedAt: Date | null;
     searchExpiresAt: Date | null;
   } | null> {
-    const em =  this.em.fork();
-    const ride = await em.findOne(
+    const em =
+      this.em.fork();
+
+    const ride =
+      await em.findOne(
         Ride,
         {
           id: rideId,
@@ -148,24 +299,34 @@ export class RidesService {
     if (!ride) {
       return null;
     }
+
     return {
-      searchStartedAt: ride.searchStartedAt,
-      searchExpiresAt:ride.searchExpiresAt,
+      searchStartedAt:
+        ride.searchStartedAt,
+
+      searchExpiresAt:
+        ride.searchExpiresAt,
     };
   }
 
-
-  async acceptRideOffer( driverId: string, dto: AcceptRideDto,): Promise<{
+  async acceptRideOffer(
+    driverId: string,
+    dto: AcceptRideDto,
+  ): Promise<{
     ride: Ride;
     offer: RideOffer;
     previousStatus: RideStatus;
     driverToPickupRoute: RideRoute;
     pickupToDestinationRoute: RideRoute;
   }> {
-    const em =  this.em.fork();
-    const result = await em.transactional(
+    const em =
+      this.em.fork();
+
+    const result =
+      await em.transactional(
         async (tx) => {
-          const driver = await tx.findOne(
+          const driver =
+            await tx.findOne(
               Driver,
               {
                 id: driverId,
@@ -179,18 +340,27 @@ export class RidesService {
             );
           }
 
-          if ( driver.status !== DriverStatus.AVAILABLE) {
+          if (
+            driver.status !==
+            DriverStatus.AVAILABLE
+          ) {
             throw new BadRequestException(
               'Driver is not available',
             );
           }
 
-          const offer =await tx.findOne(
+          const offer =
+            await tx.findOne(
               RideOffer,
               {
-                id: dto.offerId,
-                driver: driverId,
-                ride: dto.rideId,
+                id:
+                  dto.offerId,
+
+                driver:
+                  driverId,
+
+                ride:
+                  dto.rideId,
               },
               {
                 populate: [
@@ -205,24 +375,35 @@ export class RidesService {
             );
           }
 
-          if (  offer.status !==  OfferStatus.PENDING ) {
+          if (
+            offer.status !==
+            OfferStatus.PENDING
+          ) {
             throw new BadRequestException(
               `Offer is already ${offer.status}`,
             );
           }
 
-          if ( offer.expiresAt <= new Date() ) {
-            offer.status =   OfferStatus.EXPIRED;
+          if (
+            offer.expiresAt <=
+            new Date()
+          ) {
+            offer.status =
+              OfferStatus.EXPIRED;
+
             await tx.flush();
+
             throw new BadRequestException(
               'Ride offer has expired',
             );
           }
 
-          const ride = await tx.findOne(
+          const ride =
+            await tx.findOne(
               Ride,
               {
-                id: dto.rideId,
+                id:
+                  dto.rideId,
               },
             );
 
@@ -232,27 +413,50 @@ export class RidesService {
             );
           }
 
-          if (ride.status !==RideStatus.SEARCHING ) {
+          if (
+            ride.status !==
+            RideStatus.SEARCHING
+          ) {
             throw new BadRequestException(
               'Ride is no longer available',
             );
           }
-          if ( ride.driverId !== null) {
+
+          if (
+            ride.driverId !==
+            null
+          ) {
             throw new BadRequestException(
               'Ride is already assigned to a driver',
             );
           }
 
-          const previousStatus =ride.status;
-          offer.status =  OfferStatus.ACCEPTED;
-          ride.driverId = driver.id;
-          ride.status =RideStatus.ACCEPTED;
-          ride.searchStartedAt =    null;
-          ride.searchExpiresAt =  null;
-          driver.status =  DriverStatus.BUSY;
-          driver.updatedAt = new Date();
+          const previousStatus =
+            ride.status;
+
+          offer.status =
+            OfferStatus.ACCEPTED;
+
+          ride.driverId =
+            driver.id;
+
+          ride.status =
+            RideStatus.ACCEPTED;
+
+          ride.searchStartedAt =
+            null;
+
+          ride.searchExpiresAt =
+            null;
+
+          driver.status =
+            DriverStatus.BUSY;
+
+          driver.updatedAt =
+            new Date();
 
           await tx.flush();
+
           return {
             ride,
             offer,
@@ -262,39 +466,63 @@ export class RidesService {
         },
       );
 
-    const driverCoordinates =this.parseDriverLocation(
-       result.driver.location,
+    const driverCoordinates =
+      this.parseDriverLocation(
+        result.driver.location,
       );
 
-    const driverToPickupRoute =  await this.routingService
+    const driverToPickupRoute =
+      await this.routingService
         .getDriverToPickupRoute(
           {
-            latitude: driverCoordinates.latitude,
-            longitude: driverCoordinates.longitude,
+            latitude:
+              driverCoordinates.latitude,
+
+            longitude:
+              driverCoordinates.longitude,
           },
+
           {
-            latitude:result.ride.pickupLat,
-            longitude: result.ride.pickupLng,
+            latitude:
+              result.ride.pickupLat,
+
+            longitude:
+              result.ride.pickupLng,
           },
         );
 
-    const pickupToDestinationRoute = await this.routingService
+    const pickupToDestinationRoute =
+      await this.routingService
         .getRideRoute(
           {
-            latitude:  result.ride.pickupLat,
-            longitude: result.ride.pickupLng,
+            latitude:
+              result.ride.pickupLat,
+
+            longitude:
+              result.ride.pickupLng,
           },
+
           {
-            latitude:  result.ride.destinationLat,
-            longitude:result.ride.destinationLng,
+            latitude:
+              result.ride.destinationLat,
+
+            longitude:
+              result.ride.destinationLng,
           },
         );
 
     return {
-      ride:  result.ride,
-      offer: result.offer,
-      previousStatus:result.previousStatus,
+      ride:
+        result.ride,
+
+      offer:
+        result.offer,
+
+      previousStatus:
+        result.previousStatus,
+
       driverToPickupRoute,
+
       pickupToDestinationRoute,
     };
   }
@@ -304,13 +532,29 @@ export class RidesService {
     offerId: string,
     driverId: string,
   ): Promise<RideOffer> {
+    /*
+     * IMPORTANT:
+     *
+     * Do not use this.em directly inside
+     * realtime/socket request handling.
+     *
+     * Always use a request-specific fork.
+     */
+    const em =
+      this.em.fork();
+
     const offer =
-      await this.em.findOne(
+      await em.findOne(
         RideOffer,
         {
-          id: offerId,
-          driver: driverId,
-          ride: rideId,
+          id:
+            offerId,
+
+          driver:
+            driverId,
+
+          ride:
+            rideId,
         },
       );
 
@@ -320,51 +564,88 @@ export class RidesService {
       );
     }
 
-    if (  offer.status !== OfferStatus.PENDING ) {
+    if (
+      offer.status !==
+      OfferStatus.PENDING
+    ) {
       throw new BadRequestException(
         `Offer is already ${offer.status}`,
       );
     }
 
-    if (  offer.expiresAt <=  new Date()) {
-      offer.status =   OfferStatus.EXPIRED;
+    if (
+      offer.expiresAt <=
+      new Date()
+    ) {
+      offer.status =
+        OfferStatus.EXPIRED;
 
-      await this.em.flush();
+      await em.flush();
+
       throw new BadRequestException(
         'Ride offer has expired',
       );
     }
 
-    offer.status = OfferStatus.REJECTED;
-    await this.em.flush();
+    offer.status =
+      OfferStatus.REJECTED;
+
+    await em.flush();
+
     return offer;
   }
 
-  private parseDriverLocation( location: string | null,  ): DriverCoordinates {
+  private parseDriverLocation(
+    location: string | null,
+  ): DriverCoordinates {
     if (!location) {
       throw new BadRequestException(
         'Driver location is not available',
       );
     }
 
-    const pointMatch = location.match(   /POINT\s*\(\s*([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s*\)/i, );
+    const pointMatch =
+      location.match(
+        /POINT\s*\(\s*([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s*\)/i,
+      );
 
     if (pointMatch) {
-      const longitude = Number(pointMatch[1]);
-      const latitude = Number(pointMatch[2]);
-      if ( !Number.isFinite(latitude) || !Number.isFinite(longitude)  ) {
+      const longitude =
+        Number(
+          pointMatch[1],
+        );
+
+      const latitude =
+        Number(
+          pointMatch[2],
+        );
+
+      if (
+        !Number.isFinite(
+          latitude,
+        ) ||
+        !Number.isFinite(
+          longitude,
+        )
+      ) {
         throw new BadRequestException(
           'Driver location contains invalid coordinates',
         );
       }
 
-      if ( latitude < -90 || latitude > 90  ) {
+      if (
+        latitude < -90 ||
+        latitude > 90
+      ) {
         throw new BadRequestException(
           'Driver location contains invalid latitude',
         );
       }
 
-      if ( longitude < -180 || longitude > 180 ) {
+      if (
+        longitude < -180 ||
+        longitude > 180
+      ) {
         throw new BadRequestException(
           'Driver location contains invalid longitude',
         );
@@ -376,14 +657,50 @@ export class RidesService {
       };
     }
 
-    const ewktMatch =location.match(  /SRID=\d+;\s*POINT\s*\(\s*([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s*\)/i, );
+    const ewktMatch =
+      location.match(
+        /SRID=\d+;\s*POINT\s*\(\s*([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s*\)/i,
+      );
 
     if (ewktMatch) {
-      const longitude =   Number(ewktMatch[1]);
-      const latitude =  Number(ewktMatch[2]);
-      if (!Number.isFinite(latitude) ||  !Number.isFinite(longitude) ) {
+      const longitude =
+        Number(
+          ewktMatch[1],
+        );
+
+      const latitude =
+        Number(
+          ewktMatch[2],
+        );
+
+      if (
+        !Number.isFinite(
+          latitude,
+        ) ||
+        !Number.isFinite(
+          longitude,
+        )
+      ) {
         throw new BadRequestException(
           'Driver location contains invalid coordinates',
+        );
+      }
+
+      if (
+        latitude < -90 ||
+        latitude > 90
+      ) {
+        throw new BadRequestException(
+          'Driver location contains invalid latitude',
+        );
+      }
+
+      if (
+        longitude < -180 ||
+        longitude > 180
+      ) {
+        throw new BadRequestException(
+          'Driver location contains invalid longitude',
         );
       }
 
@@ -398,34 +715,88 @@ export class RidesService {
     );
   }
 
-  private validateLocations( dto: CreateRideDto,): void {
-    if (dto.pickupLat ===dto.destinationLat &&  dto.pickupLng ===dto.destinationLng) {
+  private validateLocations(
+    dto: CreateRideDto,
+  ): void {
+    if (
+      dto.pickupLat ===
+        dto.destinationLat &&
+      dto.pickupLng ===
+        dto.destinationLng
+    ) {
       throw new BadRequestException(
         'Pickup and destination cannot be the same',
       );
     }
   }
 
-  private calculateDistanceKm( dto: CreateRideDto,  ): number {
-    const earthRadiusKm =     6371;
-    const lat1 =  this.toRadians(   dto.pickupLat, );
-    const lat2 = this.toRadians(   dto.destinationLat,  );
-    const deltaLat = this.toRadians(   dto.destinationLat -     dto.pickupLat, );
-    const deltaLng =  this.toRadians(    dto.destinationLng -      dto.pickupLng,  );
-    const a = Math.sin(deltaLat / 2, ) ** 2 + Math.cos(lat1) *Math.cos(lat2) *Math.sin(deltaLng / 2,) ** 2;
-    const c =2 *Math.atan2(Math.sqrt(a),Math.sqrt(1 - a),);
-    const distanceKm =earthRadiusKm * c;
+  private calculateDistanceKm(
+    dto: CreateRideDto,
+  ): number {
+    const earthRadiusKm =
+      6371;
 
-    if (distanceKm <= 0) {
+    const lat1 =
+      this.toRadians(
+        dto.pickupLat,
+      );
+
+    const lat2 =
+      this.toRadians(
+        dto.destinationLat,
+      );
+
+    const deltaLat =
+      this.toRadians(
+        dto.destinationLat -
+          dto.pickupLat,
+      );
+
+    const deltaLng =
+      this.toRadians(
+        dto.destinationLng -
+          dto.pickupLng,
+      );
+
+    const a =
+      Math.sin(
+        deltaLat / 2,
+      ) ** 2 +
+      Math.cos(lat1) *
+        Math.cos(lat2) *
+        Math.sin(
+          deltaLng / 2,
+        ) ** 2;
+
+    const c =
+      2 *
+      Math.atan2(
+        Math.sqrt(a),
+        Math.sqrt(
+          1 - a,
+        ),
+      );
+
+    const distanceKm =
+      earthRadiusKm * c;
+
+    if (
+      distanceKm <= 0
+    ) {
       throw new BadRequestException(
         'Unable to calculate ride distance',
       );
     }
+
     return distanceKm;
   }
 
-  private toRadians(value: number,): number {
+  private toRadians(
+    value: number,
+  ): number {
     return (
-      (value * Math.PI) /180);
+      (value * Math.PI) /
+      180
+    );
   }
 }

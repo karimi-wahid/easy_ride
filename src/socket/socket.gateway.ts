@@ -115,58 +115,91 @@ export class RealtimeGateway
       return;
     }
 
-    if (identity.type === 'driver') {
-      void this.realtimeService
-        .joinDriver(
-          client,
-          identity.id,
-        )
-        .catch((error) => {
-          this.logger.error(
-            `FAILED TO JOIN DRIVER ROOM | ` +
-              `driverId=${identity.id} | ` +
-              `error=${this.getErrorMessage(error)}`,
-          );
-
-          client.disconnect(true);
-        });
-
-      this.logger.log(
-        `DRIVER CONNECTED | ` +
-          `socket=${client.id} | ` +
-          `driverId=${identity.id}`,
-      );
-    }
-
-    if (identity.type === 'user') {
-      void this.realtimeService
-        .joinUser(
-          client,
-          identity.id,
-        )
-        .catch((error) => {
-          this.logger.error(
-            `FAILED TO JOIN USER ROOM | ` +
-              `userId=${identity.id} | ` +
-              `error=${this.getErrorMessage(error)}`,
-          );
-
-          client.disconnect(true);
-        });
-
-      this.logger.log(
-        `USER CONNECTED | ` +
-          `socket=${client.id} | ` +
-          `userId=${identity.id}`,
-      );
-    }
-
     this.logger.log(
       `SOCKET CONNECTED | ` +
         `socket=${client.id} | ` +
         `type=${identity.type} | ` +
         `id=${identity.id}`,
     );
+
+    if (identity.type === 'driver') {
+      void this.joinDriverRoom(
+        client,
+        identity.id,
+      );
+      return;
+    }
+
+    if (identity.type === 'user') {
+      void this.joinUserRoom(
+        client,
+        identity.id,
+      );
+      return;
+    }
+
+    this.logger.warn(
+      `INVALID SOCKET IDENTITY | ` +
+        `socket=${client.id}`,
+    );
+
+    client.disconnect(true);
+  }
+
+  private async joinDriverRoom(
+    client: Socket,
+    driverId: string,
+  ): Promise<void> {
+    try {
+      await this.realtimeService.joinDriver(
+        client,
+        driverId,
+      );
+
+      this.logger.log(
+        `DRIVER ROOM READY | ` +
+          `socket=${client.id} | ` +
+          `driverId=${driverId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `FAILED TO JOIN DRIVER ROOM | ` +
+          `socket=${client.id} | ` +
+          `driverId=${driverId} | ` +
+          `error=${this.getErrorMessage(error)}`,
+        this.getErrorStack(error),
+      );
+
+      client.disconnect(true);
+    }
+  }
+
+  private async joinUserRoom(
+    client: Socket,
+    userId: string,
+  ): Promise<void> {
+    try {
+      await this.realtimeService.joinUser(
+        client,
+        userId,
+      );
+
+      this.logger.log(
+        `USER ROOM READY | ` +
+          `socket=${client.id} | ` +
+          `userId=${userId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `FAILED TO JOIN USER ROOM | ` +
+          `socket=${client.id} | ` +
+          `userId=${userId} | ` +
+          `error=${this.getErrorMessage(error)}`,
+        this.getErrorStack(error),
+      );
+
+      client.disconnect(true);
+    }
   }
 
   handleDisconnect(client: Socket): void {
@@ -212,9 +245,6 @@ export class RealtimeGateway
       const acceptedAt =
         new Date().toISOString();
 
-      /*
-       * Notify passenger that driver accepted.
-       */
       const acceptedPayload = {
         rideId: ride.id,
 
@@ -230,17 +260,11 @@ export class RealtimeGateway
         acceptedPayload,
       );
 
-      /*
-       * Notify ride room that driver has been assigned.
-       */
       this.realtimeService.notifyRideDriverAssigned(
         ride.id,
         acceptedPayload,
       );
 
-      /*
-       * Notify ride status change.
-       */
       this.realtimeService.notifyRideStateChanged(
         ride.id,
         {
@@ -257,11 +281,6 @@ export class RealtimeGateway
         },
       );
 
-      /*
-       * ROUTE 1
-       *
-       * Driver current location -> Pickup.
-       */
       this.realtimeService.notifyRideRoute(
         ride.id,
         {
@@ -274,11 +293,6 @@ export class RealtimeGateway
         },
       );
 
-      /*
-       * ROUTE 2
-       *
-       * Pickup -> Destination.
-       */
       this.realtimeService.notifyRideRoute(
         ride.id,
         {
@@ -296,15 +310,9 @@ export class RealtimeGateway
         `RIDE ACCEPTED | ` +
           `driverId=${identity.id} | ` +
           `rideId=${ride.id} | ` +
-          `offerId=${result.offer.id} | ` +
-          `driverToPickupDistance=${result.driverToPickupRoute.distance} | ` +
-          `pickupToDestinationDistance=${result.pickupToDestinationRoute.distance}`,
+          `offerId=${result.offer.id}`,
       );
 
-      /*
-       * Return both routes to the socket client
-       * that accepted the ride.
-       */
       return {
         success: true,
 
@@ -321,6 +329,13 @@ export class RealtimeGateway
           result.pickupToDestinationRoute,
       };
     } catch (error) {
+      this.logger.error(
+        `ACCEPT RIDE FAILED | ` +
+          `socket=${client.id} | ` +
+          `error=${this.getErrorMessage(error)}`,
+        this.getErrorStack(error),
+      );
+
       throw this.toWsException(error);
     }
   }
@@ -344,26 +359,95 @@ export class RealtimeGateway
       const identity =
         this.getIdentity(client);
 
-      const ride =
-        await this.ridesService.getRideForRealtime(
-          dto.rideId,
+      this.logger.debug(
+        `JOIN RIDE REQUEST | ` +
+          `socket=${client.id} | ` +
+          `type=${identity.type} | ` +
+          `id=${identity.id} | ` +
+          `rideId=${dto.rideId}`,
+      );
+
+      /*
+       * Load the ride.
+       *
+       * RidesService.getRideForRealtime()
+       * MUST use this.em.fork().
+       */
+      let ride;
+
+      try {
+        ride =
+          await this.ridesService.getRideForRealtime(
+            dto.rideId,
+          );
+      } catch (error) {
+        this.logger.error(
+          `JOIN RIDE FAILED WHILE LOADING RIDE | ` +
+            `socket=${client.id} | ` +
+            `rideId=${dto.rideId} | ` +
+            `type=${identity.type} | ` +
+            `id=${identity.id} | ` +
+            `error=${this.getErrorMessage(error)}`,
+          this.getErrorStack(error),
         );
 
+        throw error;
+      }
+
+      /*
+       * Check that the authenticated socket
+       * actually belongs to this ride.
+       *
+       * Driver:
+       *     ride.driverId === socket driver id
+       *
+       * User:
+       *     ride.userId === socket user id
+       */
       const allowed =
         identity.type === 'driver'
           ? ride.driverId === identity.id
           : ride.userId === identity.id;
 
       if (!allowed) {
+        this.logger.warn(
+          `RIDE ROOM ACCESS DENIED | ` +
+            `socket=${client.id} | ` +
+            `rideId=${dto.rideId} | ` +
+            `type=${identity.type} | ` +
+            `id=${identity.id} | ` +
+            `rideUserId=${ride.userId} | ` +
+            `rideDriverId=${ride.driverId}`,
+        );
+
         throw new WsException(
           'You are not part of this ride',
         );
       }
 
-      await this.realtimeService.joinRide(
-        client,
-        dto.rideId,
-      );
+      /*
+       * Only after authorization do we
+       * join the Socket.IO room.
+       */
+      try {
+        await this.realtimeService.joinRide(
+          client,
+          dto.rideId,
+        );
+      } catch (error) {
+        this.logger.error(
+          `JOIN RIDE FAILED WHILE JOINING SOCKET ROOM | ` +
+            `socket=${client.id} | ` +
+            `rideId=${dto.rideId} | ` +
+            `room=ride:${dto.rideId} | ` +
+            `type=${identity.type} | ` +
+            `id=${identity.id} | ` +
+            `error=${this.getErrorMessage(error)}`,
+          this.getErrorStack(error),
+        );
+
+        throw error;
+      }
 
       this.logger.log(
         `RIDE ROOM JOINED | ` +
@@ -381,6 +465,14 @@ export class RealtimeGateway
         room: `ride:${dto.rideId}`,
       };
     } catch (error) {
+      this.logger.error(
+        `JOIN RIDE REQUEST FAILED | ` +
+          `socket=${client.id} | ` +
+          `rideId=${dto.rideId} | ` +
+          `error=${this.getErrorMessage(error)}`,
+        this.getErrorStack(error),
+      );
+
       throw this.toWsException(error);
     }
   }
@@ -439,6 +531,14 @@ export class RealtimeGateway
         rideId: dto.rideId,
       };
     } catch (error) {
+      this.logger.error(
+        `LEAVE RIDE FAILED | ` +
+          `socket=${client.id} | ` +
+          `rideId=${dto.rideId} | ` +
+          `error=${this.getErrorMessage(error)}`,
+        this.getErrorStack(error),
+      );
+
       throw this.toWsException(error);
     }
   }
@@ -515,6 +615,15 @@ export class RealtimeGateway
         status: offer.status,
       };
     } catch (error) {
+      this.logger.error(
+        `REJECT RIDE FAILED | ` +
+          `socket=${client.id} | ` +
+          `rideId=${dto.rideId} | ` +
+          `offerId=${dto.offerId} | ` +
+          `error=${this.getErrorMessage(error)}`,
+        this.getErrorStack(error),
+      );
+
       throw this.toWsException(error);
     }
   }
@@ -605,6 +714,14 @@ export class RealtimeGateway
         timestamp: dto.timestamp,
       };
     } catch (error) {
+      this.logger.error(
+        `DRIVER LOCATION FAILED | ` +
+          `socket=${client.id} | ` +
+          `rideId=${dto.rideId} | ` +
+          `error=${this.getErrorMessage(error)}`,
+        this.getErrorStack(error),
+      );
+
       throw this.toWsException(error);
     }
   }
@@ -694,5 +811,15 @@ export class RealtimeGateway
     }
 
     return String(error);
+  }
+
+  private getErrorStack(
+    error: unknown,
+  ): string | undefined {
+    if (error instanceof Error) {
+      return error.stack;
+    }
+
+    return undefined;
   }
 }
