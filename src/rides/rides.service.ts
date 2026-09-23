@@ -376,48 +376,63 @@ export class RidesService {
 
 
 
-  private async getDriverPostgisLocation(  driverId: string, ): Promise<DriverCoordinates | null> {
-    const result = await this.em.getConnection().execute<
-        Array<{
-          latitude: number | string | null;
-          longitude: number | string | null;
-        }>
-      >(
-        `
-          SELECT
-            ST_Y(location) AS latitude,
-            ST_X(location) AS longitude
-          FROM drivers
-          WHERE id = ?
-            AND "deletedAt" IS NULL
-          LIMIT 1
-        `,
-        [
-          driverId,
-        ],
-      );
+private async getDriverPostgisLocation(driverId: string): Promise<DriverCoordinates | null> {
+  const result = await this.em.getConnection().execute<
+    Array<{
+      geometry_type: string | null;
+      srid: number | string | null;
+      latitude: number | string | null;
+      longitude: number | string | null;
+    }>
+  >(
+    `
+      SELECT
+        ST_GeometryType(location::geometry) AS geometry_type,
+        ST_SRID(location::geometry) AS srid,
+        ST_Y(location::geometry) AS latitude,
+        ST_X(location::geometry) AS longitude
+      FROM drivers
+      WHERE id = ?
+        AND "deleted_at" IS NULL
+      LIMIT 1
+    `,
+    [driverId],
+  );
 
-    if ( !result ||result.length === 0 ) {
-      return null;
-    }
-    const latitude = Number(   result[0].latitude,   );
-    const longitude =Number( result[0].longitude,);
-    if (  !Number.isFinite(latitude, ) || !Number.isFinite( longitude,)) {
-      return null;
-    }
-    if ( latitude < -90 ||  latitude > 90) {
-      return null;
-    }
-    if (longitude < -180 ||longitude > 180) {
-      return null;
-    }
-    return {
-      latitude,
-      longitude,
-    };
+  if (!result || result.length === 0) {
+    return null;
   }
 
+  const row = result[0];
+  if (row.geometry_type && !row.geometry_type.toLowerCase().includes('point')) {
+  
+    return null;
+  }
+  const srid = row.srid !== null && row.srid !== undefined ? Number(row.srid) : null;
+  if (srid !== null && srid !== 4326) {
+    return null;
+  }
 
+  const latitude = Number(row.latitude);
+  const longitude = Number(row.longitude);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  if (latitude < -90 || latitude > 90) {
+    return null;
+  }
+
+  if (longitude < -180 || longitude > 180) {
+    return null;
+  }
+
+  return {
+    latitude,
+    longitude,
+  };
+}
 
 
   async rejectOffer(
