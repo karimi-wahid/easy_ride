@@ -8,30 +8,18 @@ import {
   WebSocketServer,
   WsException,
 } from '@nestjs/websockets';
-
-import {
-  Logger,
-  ValidationPipe,
-} from '@nestjs/common';
-
-import {
-  Namespace,
-  Socket,
-} from 'socket.io';
-
+import {Logger, ValidationPipe,} from '@nestjs/common';
+import { Namespace, Socket,} from 'socket.io';
 import { RealtimeService } from './socket.service';
 import { REALTIME_EVENTS } from './socket.constants';
-
 import { AcceptRideDto } from './dto/accept-ride.dto';
 import { RejectRideDto } from './dto/reject-ride.dto';
 import { JoinRideDto } from './dto/join-ride.dto';
 import { LeaveRideDto } from './dto/leave-ride.dto';
 import { DriverLocationDto } from './dto/driver-location.dto';
-
 import { RidesService } from '../rides/rides.service';
 import { DriversService } from '../drivers/drivers.service';
 import { SocketAuthMiddleware } from './socket-auth.middleware';
-
 import { RideStatus } from '../shared/types/ride-status.enum';
 
 type SocketIdentity =
@@ -59,6 +47,7 @@ type RideRealtimeStatus =
     credentials: true,
   },
 })
+
 export class RealtimeGateway
   implements
     OnGatewayConnection,

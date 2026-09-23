@@ -28,9 +28,7 @@ export class DriversService {
     });
   }
 
-  async findByPhone(
-    phone: string,
-  ): Promise<Driver | null> {
+  async findByPhone( phone: string,): Promise<Driver | null> {
     return this.em.findOne(Driver, {
       phone,
       deletedAt: null,
@@ -53,9 +51,7 @@ export class DriversService {
     });
 
     this.em.persist(driver);
-
     await this.em.flush();
-
     return driver;
   }
 
