@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException,} from '@nestjs/common';
+import { BadRequestException,  Logger, Injectable, NotFoundException,} from '@nestjs/common';
 import { EntityManager,} from '@mikro-orm/postgresql';
 import { Ride } from '../database/entities/ride.entity';
 import { Driver } from '../database/entities/driver.entity';
@@ -19,6 +19,7 @@ interface DriverCoordinates {
 @Injectable()
 export class RidesService {
   private readonly MATCHING_WINDOW_MS = 30_000;
+  private readonly realtimeLogger = new Logger(RidesService.name);
 
   constructor(
     private readonly em: EntityManager,
@@ -153,6 +154,73 @@ export class RidesService {
     }
     return ride;
   }
+
+  
+async getRideRoutesForRealtime(rideId: string): Promise<{
+  driverToPickupRoute: RideRoute | null;
+  pickupToDestinationRoute: RideRoute | null;
+}> {
+  const ride = await this.getRideForRealtime(rideId);
+
+  const isActive =
+    ride.status === RideStatus.ACCEPTED ||
+    ride.status === RideStatus.DRIVER_ARRIVING ||
+    ride.status === RideStatus.IN_PROGRESS;
+
+  const driverId = ride.driverId;
+
+  if (!driverId || !isActive) {
+    return {
+      driverToPickupRoute: null,
+      pickupToDestinationRoute: null,
+    };
+  }
+
+  const pickup = {
+    latitude: Number(ride.pickupLat),
+    longitude: Number(ride.pickupLng),
+  };
+
+  const destination = {
+    latitude: Number(ride.destinationLat),
+    longitude: Number(ride.destinationLng),
+  };
+
+  const [driverResult, destinationResult] = await Promise.allSettled([
+    (async () => {
+      const driver = await this.getDriverPostgisLocation(driverId);
+
+      if (!driver) {
+        return null;
+      }
+
+      return this.routingService.getDriverToPickupRoute(driver, pickup);
+    })(),
+    this.routingService.getRideRoute(pickup, destination),
+  ]);
+
+  if (driverResult.status === 'rejected') {
+    this.realtimeLogger.warn(
+      `Driver route recovery failed for ride ${rideId}: ${String(driverResult.reason)}`,
+    );
+  }
+
+  if (destinationResult.status === 'rejected') {
+    this.realtimeLogger.warn(
+      `Destination route recovery failed for ride ${rideId}: ${String(destinationResult.reason)}`,
+    );
+  }
+
+  return {
+    driverToPickupRoute:
+      driverResult.status === 'fulfilled' ? driverResult.value : null,
+
+    pickupToDestinationRoute:
+      destinationResult.status === 'fulfilled'
+        ? destinationResult.value
+        : null,
+  };
+}
 
 
   async getRideMatchingTiming(  rideId: string, ): Promise<{
@@ -404,6 +472,10 @@ private async getDriverPostgisLocation(driverId: string): Promise<DriverCoordina
   }
 
   const row = result[0];
+  //prevents missing coordinates from becoming 0 through Number(null).
+  if (row.latitude == null || row.longitude == null) {
+  return null;
+}
   if (row.geometry_type && !row.geometry_type.toLowerCase().includes('point')) {
   
     return null;
